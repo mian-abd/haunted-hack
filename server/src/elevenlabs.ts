@@ -3,7 +3,7 @@
 // webhooks and its post-call webhook, and (AUTO_DIAL=1) dials whenever the actor's alarm makes a call due.
 import { createHmac, timingSafeEqual } from "node:crypto"
 import { elder, type ElderState } from "./actor"
-import { archiveTranscript } from "./store"
+import { archiveTranscript, historyFor, linkPhone, newCallerProfile, patientById, patientByPhone, recordFor, samePhone } from "./store"
 
 type Body = Record<string, any>
 export type Deps = {
@@ -25,13 +25,20 @@ export function elderContext(s: ElderState): string {
   const meds = s.meds.map(m =>
     `- ${m.name} ${m.dose} at ${m.times.join(" and ")}, for ${m.purpose}${m.missedCount ? ` (missed ${m.missedCount} time(s) recently)` : ""}`)
   return [
-    `You are calling ${p ? `${p.name}, age ${p.age}` : "an older adult"}. Call them ${first}.`,
-    p && `Conditions: ${p.conditions.join(", ")}. Family contact: ${p.family.name} (${p.family.relation}).`,
+    `You are talking with ${p ? `${p.name}${p.age ? `, age ${p.age}` : ""}` : "an older adult"}. Call them ${first}.`,
+    p?.conditions?.length && `Conditions: ${p.conditions.join(", ")}.`,
+    p?.family?.name && `Family contact: ${p.family.name}${p.family.relation ? ` (${p.family.relation})` : ""}.`,
     `Current status: ${s.status}${s.statusReason ? `, because: ${s.statusReason}` : ""}.`,
     s.status !== "ok" && `This is a follow-up call the care team asked for. Early on, ask whether that is better, the same or worse, and call report_symptom if it is not better.`,
     meds.length && `Medicines due today:\n${meds.join("\n")}`,
     teach && `Teach-back medicine: ${teach.name}.`,
   ].filter(Boolean).join("\n")
+}
+
+// {{elder_context}} for a call: the actor's live state plus the person's history from Supabase (earlier calls and
+// symptoms), so the agent remembers them across calls, phone numbers and restarts.
+export async function contextFor(elderId: string, s: ElderState, extra: (string | false)[] = []): Promise<string> {
+  return [elderContext(s), ...(await historyFor(elderId)), ...extra].filter(Boolean).join("\n")
 }
 
 // GET /api/call/mode: tells web/ whether "Start check-in" rings the phone or opens the browser call.
@@ -57,8 +64,13 @@ export function greeting(s: ElderState, inbound = false): string {
 
 // POST /api/call/dial: ElevenLabs places the call from our Twilio number, then the actor marks the call started.
 export async function dial(elderId: string): Promise<{ conversationId: string | null; callSid: string | null }> {
-  const [key, agent, phone, to] = ["ELEVENLABS_API_KEY", "ELEVENLABS_AGENT_ID", "ELEVENLABS_PHONE_NUMBER_ID", "ELDER_PHONE"].map(env)
-  if (!key || !agent || !phone || !to) fail("phone calls need ELEVENLABS_API_KEY, ELEVENLABS_AGENT_ID, ELEVENLABS_PHONE_NUMBER_ID and ELDER_PHONE in server/.env", 503)
+  const [key, agent, phone] = ["ELEVENLABS_API_KEY", "ELEVENLABS_AGENT_ID", "ELEVENLABS_PHONE_NUMBER_ID"].map(env)
+  if (!key || !agent || !phone) fail("phone calls need ELEVENLABS_API_KEY, ELEVENLABS_AGENT_ID and ELEVENLABS_PHONE_NUMBER_ID in server/.env", 503)
+  // The number to ring: the elder's own phone from their Supabase profile, else ELDER_PHONE for the demo elder.
+  const onFile = (await patientById(elderId))?.phone as string | undefined
+  const to = onFile || (elderId === defaultElder() ? env("ELDER_PHONE") : "")
+  if (!to) fail(`no phone number on file for ${elderId}: set ELDER_PHONE, or patients.phone in Supabase`, 503)
+  if (!onFile) void linkPhone(elderId, to)
   if (dialing.has(elderId)) fail("already dialing", 409)
   if (Date.now() - (onPhone.get(elderId) ?? 0) < 15 * 60_000) fail("a phone call is already in progress", 409)
   const actor = elder(elderId)
@@ -74,7 +86,7 @@ export async function dial(elderId: string): Promise<{ conversationId: string | 
         agent_id: agent,
         agent_phone_number_id: phone,
         to_number: to,
-        conversation_initiation_client_data: { dynamic_variables: { elder_id: elderId, elder_first_name: first, elder_context: elderContext(s), greeting: greeting(s) } },
+        conversation_initiation_client_data: { dynamic_variables: { elder_id: elderId, elder_first_name: first, elder_context: await contextFor(elderId, s), greeting: greeting(s) } },
       }),
       signal: AbortSignal.timeout(15_000),
     })
@@ -104,29 +116,41 @@ export async function webhook(req: Request, pathname: string, deps: Deps): Promi
   return Response.json({ output: await deps.runTool(elderId, name, rest) })
 }
 
-// POST /api/el/init: the elder calls our Twilio number. ElevenLabs asks here, while the phone rings, who is calling;
-// without the agent's dynamic variables it drops the call ("Missing required dynamic variables"). The caller's number
-// picks the elder (ELDER_PHONE); an unknown number still gets the demo elder, and the agent confirms who it is talking to.
+// POST /api/el/init: someone calls our Twilio number. While it rings, ElevenLabs asks here who is calling; without the
+// agent's dynamic variables it drops the call ("Missing required dynamic variables"). The caller's phone number finds
+// their profile in Supabase (or ELDER_PHONE, the demo elder). A number we have not met gets a new profile, and the agent
+// asks who they are and saves it (save_profile), so the next call from that number knows them and their history.
 async function inbound(req: Request, raw: string): Promise<Response> {
   sameSecret(req.headers.get("x-unc-secret"), env("EL_TOOL_SECRET"), "EL_TOOL_SECRET")
   let b: Body
   try { b = raw ? JSON.parse(raw) : {} } catch { return fail("body must be JSON") }
-  const known = !!env("ELDER_PHONE") && String(b.caller_id ?? "").replace(/[^\d+]/g, "") === env("ELDER_PHONE").replace(/[^\d+]/g, "")
-  const elderId = defaultElder()
+  const caller = String(b.caller_id ?? "")
+  const row = await patientByPhone(caller)
+  let elderId = row?.id as string | undefined
+  let known = !!elderId
+  if (!elderId && samePhone(caller, env("ELDER_PHONE"))) { elderId = defaultElder(); known = true; void linkPhone(elderId, caller) }
+  let fresh = known && row?.name === "New caller" // called before, but never told us who they are
+  if (!elderId) { const id = await newCallerProfile(caller); if (id) { elderId = id; known = fresh = true } }
+  elderId ??= defaultElder() // no Supabase: the demo elder, and the agent confirms who is speaking
   const actor = elder(elderId)
-  const s = await actor.getState()
-  const first = s.profile?.name.split(" ")[0] ?? "there"
+  let s = await actor.getState()
+  if (!s.profile && !fresh) { const rec = await recordFor(elderId); if (rec) { await actor.setup(...rec); s = await actor.getState() } }
+  const first = fresh ? "there" : s.profile?.name.split(" ")[0] ?? "there"
   onPhone.set(elderId, Date.now())
   if (s.callState !== "in_progress") await actor.startCall()
-  await actor.logEvent({ kind: "note", from: "elder", text: `${first} called Troska`, data: { conversationId: b.conversation_id ?? null, inbound: true, knownNumber: known } })
-  const context = [
-    elderContext(s),
-    `${first} called you this time. Ask what they need and help with that first, then do the check-in if there is time.`,
-    !known && `The call came from a number that is not on file for ${first}. Confirm you are speaking with ${first} before you discuss anything personal.`,
-  ].filter(Boolean).join("\n")
+  await actor.logEvent({ kind: "note", from: "elder", text: fresh ? "A new caller called Troska" : `${first} called Troska`, data: { conversationId: b.conversation_id ?? null, inbound: true, knownNumber: known } })
+  const context = fresh
+    ? [
+        "This caller is new: we do not know who they are yet. Introduce Troska as a care companion that checks in by phone. Ask their name, their age, their health conditions, the medicines they take and a family contact, and call save_profile each time you learn something. Then help with what they called about.",
+        ...(await historyFor(elderId)),
+      ].join("\n")
+    : await contextFor(elderId, s, [
+        `${first} called you this time. Ask what they need and help with that first, then do the check-in if there is time.`,
+        !known && `The call came from a number that is not on file for ${first}. Confirm you are speaking with ${first} before you discuss anything personal.`,
+      ])
   return Response.json({
     type: "conversation_initiation_client_data",
-    dynamic_variables: { elder_id: elderId, elder_first_name: first, elder_context: context, greeting: greeting(s, true) },
+    dynamic_variables: { elder_id: elderId, elder_first_name: first, elder_context: context, greeting: fresh ? "Hi, this is Troska, a care companion. Who am I speaking with?" : greeting(s, true) },
   })
 }
 

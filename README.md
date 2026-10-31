@@ -179,6 +179,11 @@ The ElevenLabs agent "Troska check-in" and our Twilio number ("HH") already exis
    ```
 
 7. **Grandpa can call Troska too.** Call our Twilio number from `ELDER_PHONE`, and the agent answers "Hi Joe, it's Troska. Thanks for calling." with his details. `el:setup` turns on the inbound webhook (`/api/el/init`). Without that webhook, ElevenLabs drops inbound calls immediately ("Missing required dynamic variables").
+   **Every number is a person:**
+   - Each caller is looked up by phone number in Supabase (`patients.phone`).
+   - A number Troska hasn't met gets its own new profile. The agent asks "Who am I speaking with?" and saves their name, age, conditions and family contact (`save_profile`).
+   - A known caller hears their own history: the last 3 calls and recent symptoms, read from Supabase.
+   - Apply the phone column once with `bun supabase/apply.ts` (it runs every migration).
 8. The post-call webhook is set up by `el:setup` too: it saves the secret in `server/.env`. After each call, a "Call recap" note lands on the timeline, the transcript goes to Supabase, and a call where Grandpa hangs up early is closed properly.
 
 **If the phone path breaks:**

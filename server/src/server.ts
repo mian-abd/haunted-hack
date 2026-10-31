@@ -1,7 +1,7 @@
 // server/: HTTP API from PLAN.md. Bun.serve on :8787, no framework.
 import { elder, isFake, prepareWebsocket, type Med, type Profile } from "./actor"
 import { callMode, dial, phoneCallEnded, startAutoDial, webhook } from "./elevenlabs"
-import { archiveCall, archiveEvent, recordFor } from "./store"
+import { archiveCall, archiveEvent, profileFields, recordFor, saveProfile } from "./store"
 export { supabaseAuth } from "./store"
 
 const ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
@@ -127,6 +127,15 @@ async function runTool(elderId: string, name: string, a: Body): Promise<string> 
       await endCall(elderId, summary, a.mood)
       escalate({ elderId, kind: "summary", reason: summary, details: { mood: a.mood } })
       return "Call ended. Summary sent to the family."
+    }
+    case "save_profile": { // the phone agent learns who a caller is (name, age, conditions, family) and keeps it in Supabase
+      const fields = profileFields(a)
+      if (!Object.keys(fields).length) bad("give at least one of name, age, conditions, family_name, family_relation, family_phone")
+      await saveProfile(elderId, fields)
+      const ev = { kind: "note" as const, from: "elder" as const, text: `Profile updated: ${Object.keys(fields).join(", ")}`, data: { profile: fields } }
+      await actor.logEvent(ev)
+      void archiveEvent(elderId, ev)
+      return `Saved to their profile: ${Object.keys(fields).join(", ")}.`
     }
   }
   return bad(`unknown tool: ${name}`)

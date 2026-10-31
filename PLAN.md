@@ -199,4 +199,10 @@ Tables: `patients`, `prescriptions`, `clinical_notes`, `calls`, `care_events` (w
 - **14:15 The ElderActor runs in Terse cloud** (org "unc", project `unc-actor`). The CLI has no local runtime for Windows, and the cloud lets any laptop run the demo. Callers set `TERSE_ACTOR_URL` and `TERSE_API_KEY`. The durability flex (Demo, step 6) restarts our server, because the state lives in the actor.
 - **14:26 First real phone call.** It worked end to end, and it showed that a mid-call urgent recheck could ring the phone again. That is now blocked in both the actor and the server.
 - **14:45 The elder can call Troska.** Inbound calls to the number were dropped ("Missing required dynamic variables"). Now `/api/el/init` answers them with the elder's details (see `server/` API).
+- **15:05 Caller profiles: a phone number is a person.** Before this, every inbound caller was treated as Grandpa Joe.
+  - Every call, in or out, finds its person in Supabase by phone number (`patients.phone`, migration `20261031150000_caller_profiles.sql`).
+  - A number we haven't met gets a new profile (`caller-<digits>`). The agent asks who they are, and saves it with the new `save_profile` tool.
+  - The agent's context carries the person's last 3 calls and recent symptoms from Supabase, so it remembers them across calls, numbers and restarts.
+  - Outbound calls ring the number on the profile.
+  - Safety: an overdose is now a danger sign, and the prompt makes the agent log an emergency (`report_symptom`, high) *before* telling the caller to dial 911. A real test call had shown the agent skipping the log.
 - **14:50 Renamed Unc → Troska** in every user-facing place: the voice agent, greetings, family texts, the web app and the docs. Internal identifiers keep their names, because renaming them would break the live setup for no visible gain: the `x-unc-secret` and `x-unc-key` headers, the `unc-*` package names and the Terse project `unc-actor`.

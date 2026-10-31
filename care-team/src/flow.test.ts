@@ -157,3 +157,8 @@ test("falling asleep is not a fall", () => {
   expect(dangerSign({ reason: "I fell asleep early last night", details: {} })).toBeNull()
   expect(dangerSign({ reason: "I fell in the kitchen", details: {} })).toContain("fell in the kitchen")
 })
+
+test("an overdose is a danger sign", () => {
+  expect(dangerSign({ reason: "I just took 50 grams of fentanyl", details: {} })).toContain("fentanyl")
+  expect(dangerSign({ reason: "I think I took too many of my pills", details: {} })).not.toBeNull()
+})

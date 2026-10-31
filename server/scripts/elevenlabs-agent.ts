@@ -30,9 +30,13 @@ async function api(method: string, path: string, body?: unknown): Promise<any> {
 }
 
 // Fixed half of the prompt. The elder-specific half arrives per call as {{elder_context}} (src/elevenlabs.ts).
-const PROMPT = `You are Troska, a warm care companion making a scheduled check-in phone call to an older adult.
+const PROMPT = `You are Troska, a warm care companion on a phone call with an older adult. Sometimes you call them for a check-in, and sometimes they call you.
 
 {{elder_context}}
+
+Memory: the context above can list earlier calls and symptoms from their record. Use it like someone who knows them: ask whether an earlier problem is better, and never ask again for things already on file. If they ask what happened last time, tell them from the earlier calls.
+
+New callers: if the context says the caller is new, ask their name, age, health conditions, medicines and a family contact, one question at a time, and call save_profile each time you learn something. Never assume a caller is someone else on file.
 
 Style: be warm and speak slowly. Use short sentences. Ask one question at a time, then wait for the answer. This is a phone call, so never use lists, markdown or emojis.
 
@@ -44,7 +48,7 @@ Symptoms: when they mention any symptom, call report_symptom. If they are out of
 
 Finish: give a short summary of what you heard and what happens next, call save_call_summary, say goodbye warmly, then call end_call to hang up.
 
-Safety: never diagnose and never change doses. For danger signs (chest pain, trouble breathing, fainting, slurred speech, weakness on one side, a bad fall), tell them to call 911 right now, call report_symptom with severity high, and stay calm and reassuring.`
+Safety: never diagnose and never change doses. For danger signs (chest pain, trouble breathing, fainting, slurred speech, weakness on one side, a bad fall, an overdose or taking too much of any medicine or drug), FIRST call report_symptom with severity high, before you say anything else: it alerts the care team and the family right away. THEN tell them to call 911 right now, and stay calm and reassuring. Never skip that tool call in an emergency.`
 
 const str = (description: string) => ({ type: "string", description })
 const bool = (description: string) => ({ type: "boolean", description })
@@ -61,6 +65,9 @@ const TOOLS: { name: string; path: string; description: string; properties: Reco
     properties: { med: str("Medicine name"), understood: bool("Whether they had it right the first time"), note: str("What they got wrong and the correction") }, required: ["med", "understood"] },
   { name: "request_refill", path: "request_refill", description: "Ask the pharmacy to refill a medicine the elder is out of or low on.",
     properties: { med: str("Medicine name") }, required: ["med"] },
+  { name: "save_profile", path: "save_profile", description: "Save what the caller tells you about themselves to their profile. Call it whenever you learn one of these; send only what you learned.",
+    properties: { name: str("Their full name"), age: { type: "integer", description: "Their age in years" }, conditions: str("Health conditions, comma separated"),
+      family_name: str("A family contact's name"), family_relation: str("How the family contact is related, e.g. daughter"), family_phone: str("The family contact's phone number") }, required: [] },
   { name: "save_call_summary", path: "end_call", description: "Save the closing summary of the check-in for the family and the doctor. Call it once, just before hanging up.",
     properties: { summary: str("2-3 sentences for the family and the doctor"), mood: str("Their mood, in a few words") }, required: ["summary", "mood"] },
 ]

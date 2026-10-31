@@ -25,7 +25,8 @@ async function rest(method: string, path: string, body?: unknown, prefer = "retu
     signal: AbortSignal.timeout(5000),
   })
   if (!r.ok) throw new Error(`${method} ${path.split("?")[0]} ${r.status}: ${(await r.text()).slice(0, 200)}`)
-  return prefer === "return=minimal" ? null : r.json()
+  const text = await r.text() // writes with return=minimal (or an ignored duplicate) answer with no body
+  return text ? JSON.parse(text) : null
 }
 
 const quietly = (what: string, p: Promise<unknown>) =>
@@ -81,4 +82,81 @@ export async function archiveTranscript(elderId: string, summary: string, transc
     else await rest("POST", "calls", { patient_id: elderId, summary, transcript })
   })())
   await archiveEvent(elderId, { kind: "note", from: "system", text: `Call transcript saved (${transcript.length} turns)`, data: { conversationId, turns: transcript.length } })
+}
+
+// ---- Caller profiles: a phone number identifies a person, so every call (in or out) finds their record and history.
+
+const digits = (p: string) => p.replace(/\D/g, "")
+/** E.164 for storage and lookup: "+1 (765) 555-0100" and "7655550100" are the same caller. */
+export const normalizePhone = (p: string) => { const d = digits(p); return d ? `+${d.length === 10 ? `1${d}` : d}` : "" }
+export const samePhone = (a?: string | null, b?: string | null) => !!a && !!b && !!normalizePhone(a) && normalizePhone(a) === normalizePhone(b)
+
+export async function patientById(elderId: string): Promise<Row | null> {
+  if (!db()) return null
+  try { return (await rest("GET", `patients?id=eq.${encodeURIComponent(elderId)}&select=*`, undefined, ""))[0] ?? null }
+  catch (e: any) { console.warn(`[supabase] reading ${elderId} failed: ${e?.message ?? e}`); return null }
+}
+
+export async function patientByPhone(phone: string): Promise<Row | null> {
+  const p = normalizePhone(phone)
+  if (!db() || !p) return null
+  try { return (await rest("GET", `patients?phone=eq.${encodeURIComponent(p)}&select=*`, undefined, ""))[0] ?? null }
+  catch (e: any) { console.warn(`[supabase] phone lookup failed: ${e?.message ?? e}`); return null }
+}
+
+/** Remembers which phone belongs to an elder (the demo elder gets ELDER_PHONE the first time it calls or is called). */
+export function linkPhone(elderId: string, phone: string): Promise<unknown> {
+  return quietly("patients phone", rest("PATCH", `patients?id=eq.${encodeURIComponent(elderId)}&phone=is.null`, { phone: normalizePhone(phone) }))
+}
+
+/** A number we have not met gets its own profile, filled in during the call (save_profile). Returns its id, or null. */
+export async function newCallerProfile(phone: string): Promise<string | null> {
+  const p = normalizePhone(phone)
+  if (!db() || !p) return null
+  const id = `caller-${digits(p)}`
+  try {
+    await rest("POST", "patients?on_conflict=id", { id, name: "New caller", phone: p }, "resolution=ignore-duplicates,return=minimal")
+    return id
+  } catch (e: any) { console.warn(`[supabase] new caller profile failed: ${e?.message ?? e}`); return null }
+}
+
+const PROFILE_FIELDS = ["name", "age", "conditions", "family_name", "family_relation", "family_phone", "primary_doctor"] as const
+export function profileFields(a: Row): Row {
+  const out: Row = {}
+  for (const k of PROFILE_FIELDS) {
+    const v = a[k]
+    if (v === undefined || v === null || v === "") continue
+    if (k === "age") { const n = Number(v); if (Number.isFinite(n) && n > 0 && n < 130) out.age = Math.round(n) }
+    else if (k === "conditions") out.conditions = (Array.isArray(v) ? v : String(v).split(",")).map(x => String(x).trim()).filter(Boolean)
+    else if (k === "family_phone") out.family_phone = normalizePhone(String(v)) || String(v)
+    else out[k] = String(v).trim()
+  }
+  return out
+}
+
+/** save_profile: what the caller told the agent about themselves, stored on their patient row. */
+export async function saveProfile(elderId: string, fields: Row): Promise<void> {
+  if (!db()) throw new Error("profiles need Supabase (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY)")
+  await rest("PATCH", `patients?id=eq.${encodeURIComponent(elderId)}`, fields)
+}
+
+const when = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+
+/** The person's history from Supabase, for the voice agent: their last calls and recent symptoms, newest first. */
+export async function historyFor(elderId: string): Promise<string[]> {
+  if (!db()) return []
+  const id = encodeURIComponent(elderId)
+  try {
+    const [calls, symptoms]: Row[][] = await Promise.all([
+      rest("GET", `calls?patient_id=eq.${id}&summary=not.is.null&select=ended_at,summary,mood&order=ended_at.desc&limit=3`, undefined, ""),
+      rest("GET", `care_events?patient_id=eq.${id}&kind=eq.symptom&select=created_at,text,data&order=created_at.desc&limit=5`, undefined, ""),
+    ])
+    const lines: string[] = []
+    if (calls.length) lines.push("Earlier calls (newest first):", ...calls.map(c => `- ${when(c.ended_at)}: ${String(c.summary).slice(0, 300)}${c.mood ? ` (mood: ${c.mood})` : ""}`))
+    if (symptoms.length) lines.push("Recent symptoms on record:", ...symptoms.map(e => `- ${when(e.created_at)}: ${e.text}${e.data?.severity ? ` (${e.data.severity})` : ""}`))
+    return lines
+  } catch (e: any) {
+    console.warn(`[supabase] history for ${elderId} failed: ${e?.message ?? e}`)
+    return []
+  }
 }
