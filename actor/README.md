@@ -11,6 +11,7 @@ Contract: `PLAN.md` → "`ElderActor`". Code: `src/actor.ts`. Types to copy: `sr
 None to the contract's types, fields or method signatures. Behavior the contract leaves open:
 
 - `onAlarm()` also sets `nextCheckInAt = null` (the alarm is spent; nothing is scheduled until the next `scheduleCheckIn`).
+- `onAlarm()` during a call (`callState === "in_progress"`) does not ring: it re-arms 60 s later and moves `nextCheckInAt`, so a recheck never interrupts or gets lost in a running call.
 - `scheduleCheckIn(atMs, reason?)` also logs a `note` event (`"Check-in scheduled: <reason>"`, `data.atMs`) and rounds `atMs` to an integer (the runtime rejects `Date.now() + 1.1 * 1000`).
 - `setup()` also clears any pending alarm (full reset).
 - `recordMed()` with an unknown med name still logs the `med` event but changes no med.
