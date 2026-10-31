@@ -42,6 +42,8 @@ const routes: Record<string, (elderId: string, b: Body) => Promise<unknown>> = {
   "POST /api/call/dial": id => dial(id),
   "GET /api/call/mode": async () => callMode(),
 }
+// Routes about the server's own configuration, with no elder behind them: `elderId` is accepted but not required.
+const NO_ELDER = new Set(["GET /api/call/mode"])
 
 export async function handle(req: Request): Promise<Response> {
   const origin = req.headers.get("origin") ?? ""
@@ -59,11 +61,11 @@ export async function handle(req: Request): Promise<Response> {
     if (req.method === "GET" && pathname === "/api/realtime-token") res = await realtimeToken()
     else if (pathname.startsWith("/api/el/")) res = await webhook(req, pathname, { runTool, endCall }) // ElevenLabs phone agent
     else {
-      const route = routes[`${req.method} ${pathname}`]
+      const key = `${req.method} ${pathname}`, route = routes[key]
       if (!route) res = json({ error: "not found" }, 404)
       else {
         const b: Body = req.method === "POST" ? await req.json().catch(() => bad("body must be JSON")) : Object.fromEntries(searchParams)
-        const out = await route(need(b?.elderId, "elderId"), b)
+        const out = await route(NO_ELDER.has(key) ? String(b?.elderId ?? "") : need(b?.elderId, "elderId"), b)
         res = out instanceof Response ? out : json(out)
       }
     }
