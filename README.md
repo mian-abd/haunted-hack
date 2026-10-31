@@ -236,7 +236,7 @@ https://troska.vercel.app serves the web app from Vercel. The backend still runs
 cd web && vercel deploy --prod
 ```
 
-`vercel deploy` uploads `web/`, and Vercel builds it there with the `build` script. The project is already linked; the CLI keeps that link in `web/.vercel/`, which git ignores.
+`vercel deploy` uploads `web/`, and Vercel builds it there with the `build` script. The project is already linked; the CLI keeps that link in `web/.vercel/`, which git ignores. The project is deliberately not connected to GitHub. A deploy from a push would use the `web/vercel.json` in git, which may still hold an old tunnel URL, so deploys only come from the CLI.
 
 ### Keeping the backend up (Windows)
 
