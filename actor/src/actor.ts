@@ -56,6 +56,13 @@ export class ElderActor extends Actor<null, never, ElderBroadcast> {
     }
 
     async onAlarm(): Promise<void> {
+        // A recheck due mid-call waits 60 s: ringing now would be lost at endCall (or dial a second call on the phone path).
+        // shortcut: a call stuck in_progress (tab closed mid-call) defers forever until Reset demo or an endCall.
+        if (this.callState === "in_progress") {
+            this.nextCheckInAt = Date.now() + 60_000
+            this.alarm.set(this.nextCheckInAt)
+            return
+        }
         this.callState = "due"
         this.nextCheckInAt = null // the alarm is spent; nothing is scheduled until the next scheduleCheckIn
         await this.logEvent({ kind: "call_due", from: "system", text: "Check-in call is due" })

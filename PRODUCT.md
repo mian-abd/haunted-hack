@@ -12,8 +12,8 @@ Vite + React + TypeScript single-page app in `web/`, with two routes: `/` is the
 
 ## Users
 
-- Primary today: judges at Haunted Hacks (Real-Time AI Edition, Oct 31 2026, San Francisco). They decide prizes from a 2-minute live demo and the submission page.
-- Secondary: adult children of aging parents, the people who would actually adopt Unc. The landing page must be credible to them too.
+- Real customer: adult children of a sick or aging parent, who want to know their parent is OK without relaying messages between doctors, pharmacies and siblings. Hospitals that discharge those parents are the second customer. The landing page speaks to the adult child.
+- Today's audience: judges at Haunted Hacks (Real-Time AI Edition, Oct 31 2026, San Francisco). They decide prizes from a 2-minute live demo and the submission page.
 - The dashboard has no in-story user. It is a demo screen that shows judges the system working live.
 
 ## Product Purpose

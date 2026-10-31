@@ -13,6 +13,7 @@ const actor = await createActorBridge()
 const team = startCareTeam(relay, actor)
 
 const server = Bun.serve({
+  hostname: "127.0.0.1", // loopback only: /escalate costs OpenAI calls and writes to the Care Feed
   port: Number(process.env.PORT || 8788),
   async fetch(req) {
     const { pathname } = new URL(req.url)

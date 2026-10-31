@@ -99,7 +99,7 @@ test("a tool webhook runs the same tool as the browser call", async () => {
   const res = await post("/api/el/tool/report_symptom", { symptom: "dizzy", severity: "medium", elder_id: ID }, { "x-unc-secret": SECRET })
   expect(res.status).toBe(200)
   expect((await res.json()).output).toBe("Logged symptom: dizzy (medium). Care team notified.")
-  expect(escalations()).toEqual([{ elderId: ID, kind: "symptom", reason: "dizzy", details: { severity: "medium" } }])
+  expect(escalations()).toEqual([{ elderId: ID, kind: "symptom", reason: "dizzy", details: { severity: "medium", missedMeds: [] } }])
   expect((await state()).timeline.at(-1)).toMatchObject({ kind: "symptom", text: "dizzy" })
 })
 
@@ -181,19 +181,18 @@ test("a recheck call tells the agent it is a follow-up", async () => {
   expect(elderContext(await elder(ID).getState())).toContain("This is a follow-up call")
 })
 
-test("an alarm during a phone call does not ring the phone again; the recheck dials after the call ends", async () => {
+// The actor defers a recheck that comes due mid-call; the server also refuses to ring a live phone call again, in case an
+// older actor (or anything else) marks a call due while the phone is still connected.
+test("the server never rings the phone again while its call is live; the call's end frees it", async () => {
   expect((await post("/api/call/dial", { elderId: ID })).status).toBe(200)
-  await post("/api/demo/schedule", { elderId: ID, inSeconds: 0 }) // e.g. the 60 s urgent recheck firing mid-call
-  await Bun.sleep(20)
-  expect((await state()).callState).toBe("due")
-  const now = Date.now()
-  expect(await autoDialOnce(ID, now)).toBe("failed") // a phone call is already in progress
+  await elder(ID).endCall("ended on the actor only") // the actor no longer says in_progress...
+  const again = await post("/api/call/dial", { elderId: ID })
+  expect(again.status).toBe(409) // ...but the phone call is still live
+  expect((await again.json()).error).toBe("a phone call is already in progress")
   expect(outbound()).toHaveLength(1)
 
-  const end = await post("/api/el/tool/end_call", { summary: "Wrapped up.", mood: "ok" }, { "x-unc-secret": SECRET })
-  expect(end.status).toBe(200)
-  await post("/api/demo/schedule", { elderId: ID, inSeconds: 0 })
-  await Bun.sleep(20)
-  expect(await autoDialOnce(ID, now + 61_000)).toBe("dialed")
+  const body = JSON.stringify({ type: "post_call_transcription", data: { analysis: { transcript_summary: "done" } } })
+  expect((await post("/api/el/post-call", body, signed(body))).status).toBe(200) // the post-call webhook ends it
+  expect((await post("/api/call/dial", { elderId: ID })).status).toBe(200)
   expect(outbound()).toHaveLength(2)
 })

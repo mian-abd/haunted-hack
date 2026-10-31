@@ -131,6 +131,16 @@ test("one case per call: the demo call is one thread with exactly one refill", a
   expect(events().find((e) => e.data.type === "refill_ready")!.data.trigger).toBe("refill")
 })
 
+test("end_call closes the case: the next call (a recheck, or a rerun after Reset demo) is a new thread with its own refill", async () => {
+  const { escalate, events } = team()
+  const refill = { elderId: "grandpa-joe", kind: "refill" as const, reason: "Refill needed: Amlodipine", details: { med: "Amlodipine" } }
+  const first = escalate(refill)
+  expect(escalate({ elderId: "grandpa-joe", kind: "summary", reason: "call one done" })).toBe(first) // the summary still joins its call's case
+  const second = escalate(refill)
+  expect(second).not.toBe(first)
+  await until(() => events().filter((e) => e.data.type === "refill_ready").length === 2)
+})
+
 test("escalate body validation and channel names", () => {
   expect(invalid({ elderId: "grandpa-joe", kind: "symptom", reason: "dizzy" })).toBeNull()
   expect(invalid({ elderId: "grandpa-joe", kind: "symptom", reason: "dizzy", details: { severity: "high" } })).toBeNull()

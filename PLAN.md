@@ -24,7 +24,7 @@ The family watches it all live: while Grandpa talks, the screen shows what is be
 ## Demo (the centerpiece): one person talks, the screen shows the context live
 
 One screen, split view:
-- **Left — the call:** a teammate (in a grandpa costume, for the costume contest) answers a real phone call from the voice agent, on speaker. The panel shows each tool call as it happens (med missed, symptom, teach-back). The full transcript arrives after hang-up.
+- **Left — the call:** a teammate (in a grandpa costume, for the costume contest) answers a real phone call from the voice agent, on speaker. The panel shows each tool call as it happens (med missed, symptom, teach-back). After hang-up a short call recap lands on the timeline. No raw transcript on screen (PRODUCT.md: summaries, not transcripts).
 - **Right — the Care Feed:** three lanes, **Doctor / Pharmacy / Family**, fill in real time with what each one is about to receive. The agent-to-agent thread on Agent Relay is under them. The elder status card (ok / watch / urgent) and the next check-in countdown are on top.
 
 Script (about 2 min):
@@ -39,7 +39,7 @@ Script (about 2 min):
 
 **In (MVP today):** phone check-in call (ElevenLabs agent on our Twilio number, dialed by the actor's alarm, tools as webhooks to `server/`) · browser voice call (OpenAI Realtime over WebRTC) kept as the fallback · medication teach-back · `ElderActor` (state, timeline, alarm, status) · care team on Agent Relay · split-view dashboard with live Care Feed · Supabase schema + seed hospital records + call archive · a scripted no-LLM demo mode as a safety net.
 
-**Out (mocked or stretch):** Apple Watch / HealthKit → a "Simulate vitals spike" button · local-LLM webcam fall detection → stretch (one webcam frame to a vision model) · a live word-by-word transcript of the phone call → needs ElevenLabs' enterprise monitoring, so we show tool events live and the transcript after hang-up · real EHR / pharmacy → seed data · SMS to family → stretch (the MVP shows it in the Family lane).
+**Out (mocked or stretch):** Apple Watch / HealthKit → a "Simulate vitals spike" button · local-LLM webcam fall detection → stretch (one webcam frame to a vision model) · a live word-by-word transcript of the phone call → needs ElevenLabs' enterprise monitoring, so we show tool events live and a call recap after hang-up (the raw transcript is never shown) · real EHR / pharmacy → seed data · SMS to family → stretch (the MVP shows it in the Family lane).
 
 ## Architecture
 
@@ -55,7 +55,8 @@ server/ ──POST /escalate──▶ care-team/ (Bun :8788) ⇄ Agent Relay [ca
                                   └─ reads hospital records ← Supabase (fallback: supabase/seed.json)
 ```
 
-- **Call trigger:** actor alarm → `call_due` over the WebSocket → `web/` → `POST /api/call/dial` → `server/` → ElevenLabs outbound call → Twilio → Grandpa's phone rings.
+- **Call trigger:** actor alarm → `callState: "due"` → `server/` with `AUTO_DIAL=1` (it polls the actor and dials once) → ElevenLabs outbound call → Twilio → Grandpa's phone rings. `web/` never dials, so two open dashboards cannot ring the phone twice.
+- **Network:** actor, server and care-team bind `127.0.0.1` only, and web is Vite on localhost, so nothing answers on the venue Wi-Fi. The tunnel reaches only `/api/el/*`: the server answers 403 to any other request that carries `x-forwarded-for`.
 - **During the call:** the ElevenLabs agent calls its webhook tools → `server/` (`POST /api/el/tool/:name`) → the same tool code as before → `ElderActor` + `POST /escalate`. The Care Feed fills while he talks.
 - **Fallback voice path (unchanged):** browser mic ⇄ WebRTC ⇄ OpenAI Realtime → `POST /api/tool`.
 
@@ -94,7 +95,7 @@ Emitted fields (`@Persisted @Emittable`): `profile: Profile | null`, `meds: Med[
 Methods (async, called through the generated client):
 - `setup(profile: Profile, meds: Med[])`: full reset, used for the demo reset
 - `scheduleCheckIn(atMs: number, reason?: string)`: sets `this.alarm` and `nextCheckInAt`
-- `onAlarm()`: sets `callState = "due"`, adds a `call_due` timeline event, then `broadcast({ type: "call_due" })`
+- `onAlarm()`: sets `callState = "due"`, adds a `call_due` timeline event, then `broadcast({ type: "call_due" })`. During a call (`callState === "in_progress"`) it rings nothing: it re-arms 60 s later and moves `nextCheckInAt`.
 - `startCall()` / `endCall(summary: string, mood?: string)`
 - `recordMed(name: string, taken: boolean, note?: string)`: updates `lastTakenAt` / `missedCount` and adds a `med` event
 - `logEvent(e: { kind; text; from?; to?; data? }): TimelineEvent`
@@ -113,7 +114,7 @@ Rule: reassign arrays and objects instead of mutating them, or Terse will not pe
 - `POST /api/demo/schedule` `{ elderId, inSeconds }`
 - `POST /api/demo/vitals` `{ elderId, heartRate, note? }`: logs a `vitals` event, then escalates
 - `POST /api/call/start` `{ elderId }` · `POST /api/call/end` `{ elderId, summary, mood? }`
-- `POST /api/call/dial` `{ elderId }` → `{ conversationId, callSid }`: places the check-in call with ElevenLabs `POST /v1/convai/twilio/outbound-call` (`agent_id`, `agent_phone_number_id`, `to_number`), passing `elder_id`, `elder_name`, `meds` and `family_name` in `conversation_initiation_client_data.dynamic_variables`, then calls `startCall()`. Dial once per `call_due`: the actor re-arms alarms after a restart.
+- `POST /api/call/dial` `{ elderId }` → `{ conversationId, callSid }`: places the check-in call with ElevenLabs `POST /v1/convai/twilio/outbound-call` (`agent_id`, `agent_phone_number_id`, `to_number`), passing `elder_id`, `elder_name`, `meds` and `family_name` in `conversation_initiation_client_data.dynamic_variables`, then calls `startCall()`. Dial once per `call_due`: the actor re-arms alarms after a restart. It dials only `ELDER_PHONE` from the server env, never a number from the request, and refuses while a call is dialing or in progress. Keep `ELDER_PHONE` out of logs, the timeline (it is broadcast and archived), dynamic variables and seed files.
 - `POST /api/el/tool/:name` `{ ...tool args, elder_id? }` → `{ output }`: the ElevenLabs webhook tools. Rejects requests without the `x-unc-secret` header matching `EL_TOOL_SECRET` (the tunnel makes this route public), then runs the same tool code as `/api/tool`. `elder_id` defaults to `grandpa-joe`.
 - `POST /api/el/post-call` (optional): the ElevenLabs `post_call_transcription` webhook. Verify the `ElevenLabs-Signature` header, log `analysis.transcript_summary` to the timeline, and archive the transcript to Supabase `calls`.
 
@@ -134,7 +135,8 @@ On the phone, the agent's built-in `end_call` hangs up after our `end_call` tool
 - Prompt: the text `buildInstructions()` produces in `web/src/voice.ts` (check-in plus teach-back), with the elder's details replaced by `{{elder_name}}`, `{{meds}}` and `{{family_name}}`. First message: "Hi {{elder_name}}, it's Unc calling for your check-in. Is now a good time?"
 - Tools: the five tools above as webhook tools → `https://<tunnel>/api/el/tool/<name>`, with an `x-unc-secret` header stored as an ElevenLabs secret. Turn on the built-in `end_call`.
 - Post-call webhook (optional) → `https://<tunnel>/api/el/post-call`.
-- Agent and phone-number ids go in `server/.env`, never in git. The tunnel can be cloudflared or ngrok to `:8787`.
+- Agent and phone-number ids go in `server/.env`, never in git. The tunnel is cloudflared or ngrok to `http://127.0.0.1:8787`; through it only `/api/el/*` answers (secret or signature checked), and everything else, including `/api/realtime-token` and `/api/call/dial`, gets 403.
+- The meds in `{{elder_context}}` name each medicine first ("Amlodipine: 5 mg at 08:00"), and the prompt gives the current time and asks only about doses whose time has passed (as `buildInstructions()` does). The server also maps "Amlodipine 5 mg" to the listed med.
 
 ### `care-team/` (Bun, :8788): Agent Relay
 
@@ -179,4 +181,6 @@ Tables: `patients`, `prescriptions`, `clinical_notes`, `calls`, `care_events` (w
 - **13:20 Phone call through ElevenLabs.** The team tested an ElevenLabs agent calling out from our Twilio number, and it works. It replaces OpenAI Realtime as the main voice layer, and that's all it replaces. The actor (alarm, memory) and the care team on Agent Relay stay as they are; they are the two prize stories. We don't use ElevenLabs agent transfers for the doctor or pharmacy, because that would duplicate Agent Relay. The browser OpenAI Realtime call stays as the fallback.
 - **13:20 One care-team.** The `care-team/` on this branch ships. Mian adds two things from `mian/ych-3-care-team`, which stays as a reference and is not merged:
   - **A safety floor:** danger signs (chest pain, fainting, a fall, slurred speech, heart rate ≥130 or ≤40, severity high) are always urgent. The LLM can raise urgency but never lower it.
-  - **One case per call:** escalations for an elder within 3 minutes join the open case, so one call makes one thread and each medication is refilled once.
+  - **One case per call:** escalations for an elder within 3 minutes join the open case, so one call makes one thread and each medication is refilled once. `e2e.ts` still expects one case per escalating tool: update its case checks when this merges.
+- **13:55 Transcript.** No raw transcript on screen, on either voice path: the call panel lists what Unc heard (tool events), and the phone call adds a short recap after hang-up. The full transcript only goes to the Supabase archive.
+- **13:55 Symptom cases carry the call's missed meds.** `report_symptom` adds `details.missedMeds` (e.g. "Amlodipine: not taken (Ran out two days ago)"), and the call covers meds before symptoms, so the doctor can link the dizziness to the missed pill and order the refill itself (the doctor → pharmacy hop on Agent Relay).

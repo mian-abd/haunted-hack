@@ -71,6 +71,8 @@ export function startCareTeam(relay: Relay, actor: ActorBridge, records = loadRe
       console.log(`[care-team] case ${caseId}: ${e.details?.med} refill already requested, skipping`)
       return caseId
     }
+    // end_call's summary ends the call: the next call (a recheck, or a rerun after Reset demo) opens a new case.
+    if (e.kind === "summary") open.delete(e.elderId)
     const c = { type: "case", caseId, trigger: e.kind, elderId: e.elderId, kind: e.kind, reason: e.reason, details: e.details ?? {}, for: owner(e.kind) }
     void (async () => {
       await relay.ensureChannel(channelFor(e.elderId))

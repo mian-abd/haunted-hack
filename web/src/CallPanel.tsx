@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { ELDER, MOCK, SERVER, getJSON, post } from "./api"
+import { ELDER, MOCK, getJSON, post } from "./api"
 import { runScript, storyline } from "./script"
 import { mmss, type ElderState, type Tone } from "./state"
 import { VoiceOffline, applyVoiceEvent, functionCalls, startMeter, startVoice, type Line } from "./voice"
@@ -70,12 +70,10 @@ export function useCall(state: ElderState) {
     const first = latest.current.profile?.name.split(" ")[0] ?? "Joe"
     setNotice("")
     try {
-      const r = await fetch(`${SERVER}/api/call/dial`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ elderId: ELDER }) })
-      const out = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(out.error ?? `dial returned ${r.status}`)
+      await post("/api/call/dial", {}) // sends the team access code too, when the dashboard is opened through the tunnel
       setNotice(`Calling ${first}'s phone…`)
     } catch (err) {
-      setNotice(`Phone call failed: ${(err as Error).message}`)
+      setNotice(`Phone call failed: ${(err as { body?: { error?: string } }).body?.error ?? (err as Error).message}`)
     }
   }
 
