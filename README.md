@@ -5,8 +5,6 @@ Behind the call, doctor, pharmacy and family agents work the case with each othe
 
 Built at Haunted Hacks (Oct 31, 2026) with Terse Durable Actors, Agent Relay, ElevenLabs + Twilio (the phone call), OpenAI Realtime (the browser fallback) and Supabase. All people and medical data in this repo are fictional.
 
-Facts and figures for the demo: [demo.md](demo.md).
-
 ## Troska at a glance
 
 **1. The whole system.** Grandpa talks on his own phone. Everything else happens behind the call.
