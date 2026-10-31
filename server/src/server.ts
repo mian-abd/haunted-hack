@@ -1,5 +1,6 @@
 // server/: HTTP API from PLAN.md. Bun.serve on :8787, no framework.
 import { elder, isFake, prepareWebsocket, type Med, type Profile } from "./actor"
+import { dial, startAutoDial, webhook } from "./elevenlabs"
 
 const ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 const REALTIME_MODEL = "gpt-realtime-2.1" // OpenAI's recommended realtime model for voice agents with tools (Oct 2026)
@@ -35,6 +36,7 @@ const routes: Record<string, (elderId: string, b: Body) => Promise<unknown>> = {
   },
   "POST /api/call/start": async id => { await elder(id).startCall(); return OK },
   "POST /api/call/end": async (id, b) => { await endCall(id, typeof b.summary === "string" && b.summary.trim() ? b.summary : "Call ended.", b.mood); return OK },
+  "POST /api/call/dial": id => dial(id),
 }
 
 export async function handle(req: Request): Promise<Response> {
@@ -47,6 +49,7 @@ export async function handle(req: Request): Promise<Response> {
   let res: Response
   try {
     if (req.method === "GET" && pathname === "/api/realtime-token") res = await realtimeToken()
+    else if (pathname.startsWith("/api/el/")) res = await webhook(req, pathname, { runTool, endCall }) // ElevenLabs phone agent
     else {
       const route = routes[`${req.method} ${pathname}`]
       if (!route) res = json({ error: "not found" }, 404)
@@ -180,4 +183,8 @@ async function realtimeToken(): Promise<Response> {
 if (import.meta.main) {
   const server = Bun.serve({ port: Number(process.env.PORT || 8787), fetch: handle })
   console.log(`server/ on ${server.url} · actor: ${isFake ? "in-memory fake" : process.env.TERSE_ACTOR_URL || "terse actor dev (127.0.0.1:7100)"} · care-team: ${process.env.CARE_TEAM_URL || "http://localhost:8788"}`)
+  if (process.env.AUTO_DIAL === "1") {
+    startAutoDial()
+    console.log("server/ AUTO_DIAL=1: a due check-in rings the elder's phone through ElevenLabs")
+  }
 }
