@@ -1,9 +1,85 @@
-# Unc: an AI care team for aging parents
+# Troska: an AI care team for aging parents
 
 A voice agent makes check-in calls to an elder, on a real phone: it confirms medications, runs teach-back and notices when something is off.
 Behind the call, doctor, pharmacy and family agents work the case with each other over Agent Relay, and one durable actor per elder remembers everything and schedules the next call.
 
 Built at Haunted Hacks (Oct 31, 2026) with Terse Durable Actors, Agent Relay, ElevenLabs + Twilio (the phone call), OpenAI Realtime (the browser fallback) and Supabase. All people and medical data in this repo are fictional.
+
+Facts and figures for the demo: [demo.md](demo.md).
+
+## Troska at a glance
+
+**1. The whole system.** Grandpa talks on his own phone. Everything else happens behind the call.
+
+```mermaid
+flowchart LR
+  phone["Grandpa's phone"] <-->|"Twilio voice call"| voice["ElevenLabs voice agent<br/>Troska check-in"]
+  voice -->|"tools: meds, symptoms,<br/>teach-back, refill, summary"| server["server/<br/>Bun API"]
+  server -->|"rings the phone when<br/>a check-in is due"| voice
+  server <-->|"state, timeline, alarms"| actor[("ElderActor<br/>Terse cloud<br/>one per elder")]
+  server -->|"escalate the case"| team["Care team on Agent Relay<br/>caretaker, doctor,<br/>pharmacy, family"]
+  team -->|"status, recheck,<br/>every message"| actor
+  team <-->|"hospital records"| db[("Supabase Postgres<br/>records, calls,<br/>care events")]
+  server -->|"calls, events, transcripts"| db
+  actor -->|"live WebSocket"| dash["Dashboard<br/>the family's Care Feed"]
+```
+
+**2. One check-in call, start to finish.** This is the 2-minute demo.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant A as ElderActor (Terse cloud)
+  participant S as Server
+  participant V as Voice agent (ElevenLabs)
+  participant G as Grandpa
+  participant T as Care team (Agent Relay)
+  participant F as Linh, his daughter
+  A->>S: alarm: a check-in is due
+  S->>V: place the call
+  V->>G: Hi Joe, it's Troska calling for your check-in
+  G->>V: I'm dizzy. I ran out of my blood-pressure pills.
+  V->>S: tools: med missed, symptom, refill, teach-back
+  S->>A: log each event (the dashboard updates live)
+  S->>T: escalate the case
+  T->>T: doctor triages, pharmacy readies the refill
+  T->>F: Hi Linh, Dad is OK but dizzy. A refill is ready at 5 PM.
+  T->>A: status watch, recheck booked
+  Note over A: state and alarm survive any server restart
+  A->>S: recheck alarm: call Grandpa again
+```
+
+Grandpa can also call Troska on the same number, any time. The agent answers with his details: "Thanks for calling."
+
+**3. The care team talks to itself on Agent Relay**, so the family doesn't have to play telephone. Each agent acts only on the messages Agent Relay delivers to it.
+
+```mermaid
+flowchart TD
+  tools(["Tool calls from the phone call"]) --> caretaker
+  caretaker -->|"case, on channel care-grandpa-joe"| doctor
+  doctor -->|"decision: ok, watch or urgent"| caretaker
+  doctor -->|"DM: refill request"| pharmacy
+  doctor -->|"DM: update the family"| family
+  pharmacy -->|"refill ready at 5 PM"| caretaker
+  family -->|"plain-English text"| linh(["Linh, the daughter"])
+  caretaker -->|"set status, schedule the recheck"| actor[("ElderActor")]
+```
+
+**Safety floor:** Troska never diagnoses. Chest pain, trouble breathing, fainting, a fall, slurred speech, or a heart rate of
+130+ or 40 or below are always **urgent**, whatever the model says. Urgent means 911 advice, the human clinician paged,
+the family told to go now, and a recheck call in 60 s.
+
+## Sponsors and what we built with them
+
+| Sponsor | What Troska uses it for | Prize track |
+|---|---|---|
+| **Terse** (Durable Actors) | One `ElderActor` per elder, deployed to Terse cloud: meds, status, timeline, and the alarm that places the next call. Restart anything else and nothing is lost. | Stateful Apps (iPhone Duo) |
+| **Agent Relay** | Four agents (caretaker, doctor, pharmacy, family) coordinate on a real Agent Relay channel and DMs. Every message streams to the Care Feed. | Agent-to-agent (Mac mini) |
+| **Terse + Agent Relay together** | The actor is the memory and the scheduler, and Relay is the coordination. Each does a job the other can't. | Bonus for using both |
+| **Supabase** | Postgres is the system of record, with row-level security per family: hospital records, every call (with its transcript) and every care event. | Most likely to scale to millions |
+| **OpenAI** | The agents' brains (`gpt-6-luna`), plus the browser voice fallback (`gpt-realtime-2.1`). | (credits) |
+
+Also built with: ElevenLabs and Twilio (the phone voice, both directions), cloudflared (the webhook tunnel), Bun, and Vite + React.
 
 ## Prerequisites
 
@@ -19,7 +95,7 @@ Built at Haunted Hacks (Oct 31, 2026) with Terse Durable Actors, Agent Relay, El
 |---|---|---|
 | `ElderActor` | **Terse cloud**, project `unc-actor` (org "unc"). Deployed with `cd actor && terse deploy` | `TERSE_ACTOR_URL=https://api.useterse.ai/cmvww8c4y013tjy2a0d2vx8x2/actors` and `TERSE_API_KEY` (app.useterse.ai → API keys) in `server/.env` and `care-team/.env`. With both set, no `terse actor dev` is needed, on any OS. |
 | Hospital records, call archive, care history | **Supabase** (the team project). Schema + seed applied with `supabase/apply.ts` | `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (the `sb_secret_` key) in `server/.env` and `care-team/.env` |
-| Phone voice | **ElevenLabs** agent "Unc check-in" on our Twilio number "HH" | `server/.env`: see "3. The phone call" |
+| Phone voice | **ElevenLabs** agent "Troska check-in" on our Twilio number "HH" | `server/.env`: see "3. The phone call" |
 | Care team | **Agent Relay** (Relaycast), anonymous 24 h workspace per start | `RELAY_WORKSPACE_KEY` to keep one workspace |
 | Agent brains, browser voice | **OpenAI** (`gpt-6-luna`, `gpt-realtime-2.1`) | `OPENAI_API_KEY` in `server/.env` and `care-team/.env` (or the root `.env` for dev.sh) |
 
@@ -70,7 +146,7 @@ Each line starts from the repo root. Every one should end with 0 fail or a clean
 
 ### 3. The phone call (ElevenLabs + Twilio)
 
-The ElevenLabs agent "Unc check-in" and our Twilio number ("HH") already exist in the team's ElevenLabs workspace. Whoever runs the demo machine does this setup once on that machine. Details: [server/README.md, Phone check-in](server/README.md#phone-check-in-elevenlabs--twilio).
+The ElevenLabs agent "Troska check-in" and our Twilio number ("HH") already exist in the team's ElevenLabs workspace. Whoever runs the demo machine does this setup once on that machine. Details: [server/README.md, Phone check-in](server/README.md#phone-check-in-elevenlabs--twilio).
 
 1. Put these in **`server/.env`** (git-ignored). Bun loads it both under dev.sh and for `el:setup`.
 
@@ -88,7 +164,7 @@ The ElevenLabs agent "Unc check-in" and our Twilio number ("HH") already exist i
    cloudflared tunnel --url http://localhost:8787
    ```
 
-3. Point the agent at this machine. This updates the agent's five webhook tools and the stored secret, and moves the HH number to "Unc check-in". It prints `ELEVENLABS_AGENT_ID`: add that to `server/.env`. Re-run it whenever the tunnel URL or `EL_TOOL_SECRET` changes.
+3. Point the agent at this machine. This updates the agent's five webhook tools and the stored secret, and moves the HH number to "Troska check-in". It prints `ELEVENLABS_AGENT_ID`: add that to `server/.env`. Re-run it whenever the tunnel URL or `EL_TOOL_SECRET` changes.
 
    ```sh
    cd server && PUBLIC_URL=https://<tunnel> bun run el:setup
@@ -102,7 +178,13 @@ The ElevenLabs agent "Unc check-in" and our Twilio number ("HH") already exist i
    curl -X POST localhost:8787/api/call/dial -H 'content-type: application/json' -d '{"elderId":"grandpa-joe"}'
    ```
 
-7. Optional, recommended: the post-call webhook. In the ElevenLabs dashboard, open the agent's settings, then Post-call webhook, and enter `https://<tunnel>/api/el/post-call`. Put its secret in `ELEVENLABS_WEBHOOK_SECRET` in `server/.env`. After each call, a "Call recap" note lands on the timeline, and a call where Grandpa hangs up early is closed properly.
+7. **Grandpa can call Troska too.** Call our Twilio number from `ELDER_PHONE`, and the agent answers "Hi Joe, it's Troska. Thanks for calling." with his details. `el:setup` turns on the inbound webhook (`/api/el/init`). Without that webhook, ElevenLabs drops inbound calls immediately ("Missing required dynamic variables").
+   **Every number is a person:**
+   - Each caller is looked up by phone number in Supabase (`patients.phone`).
+   - A number Troska hasn't met gets its own new profile. The agent asks "Who am I speaking with?" and saves their name, age, conditions and family contact (`save_profile`).
+   - A known caller hears their own history: the last 3 calls and recent symptoms, read from Supabase.
+   - Apply the phone column once with `bun supabase/apply.ts` (it runs every migration).
+8. The post-call webhook is set up by `el:setup` too: it saves the secret in `server/.env`. After each call, a "Call recap" note lands on the timeline, the transcript goes to Supabase, and a call where Grandpa hangs up early is closed properly.
 
 **If the phone path breaks:**
 - **No ring.** Run the `curl` dial above and read the error:
@@ -123,17 +205,13 @@ The 2-minute script is in [PLAN.md, Demo](PLAN.md#demo-the-centerpiece-one-perso
 
 ## Architecture
 
-```
-[Grandpa's phone] ⇄ Twilio ⇄ [ElevenLabs agent "Unc check-in"]      (fallback: browser mic ⇄ WebRTC ⇄ OpenAI Realtime → POST /api/tool)
-                                     │ webhook tools        ▲ outbound-call API (AUTO_DIAL on call_due)
-                                     ▼ (tunnel)             │
-web/ (Vite+React :5173) ──HTTP──▶ server/ (Bun :8787) ──Terse client──▶ actor/ ElderActor (:7100)
-        ▲          WebSocket: state / state_update / call_due                 │ alarm → call_due
-        └─────────────────────────────────────────────────────────────────────┘
-server/ ──POST /escalate──▶ care-team/ (Bun :8788) ⇄ Agent Relay [caretaker · doctor · pharmacy · family]
-                                  ├─ mirrors every relay message → ElderActor.logEvent (the live Care Feed)
-                                  └─ reads hospital records ← Supabase (fallback: supabase/seed.json)
-```
+The diagrams in [Troska at a glance](#troska-at-a-glance) show how the pieces connect. Ports:
+- `web/` on :5173
+- `server/` on :8787. ElevenLabs reaches it through a tunnel at `/api/el/*`.
+- `care-team/` on :8788
+- `actor/` in Terse cloud, or `terse actor dev` on :7100
+
+The browser fallback for the call is OpenAI Realtime over WebRTC, which posts its tool calls to `POST /api/tool`.
 
 | Folder | What it is |
 |---|---|

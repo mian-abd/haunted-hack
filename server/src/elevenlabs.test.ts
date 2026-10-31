@@ -165,9 +165,10 @@ test("auto-dial rings the phone once the alarm makes a call due, and backs off a
 })
 
 test("call mode tells web/ whether Start check-in rings the phone", async () => {
-  const mode = async () => (await handle(new Request(`http://server.test/api/call/mode?elderId=${ID}`))).json()
+  const mode = async (query = `?elderId=${ID}`) => (await handle(new Request(`http://server.test/api/call/mode${query}`))).json()
   process.env.AUTO_DIAL = "1"
   expect(await mode()).toEqual({ phone: true, autoDial: true })
+  expect(await mode("")).toEqual({ phone: true, autoDial: true }) // server config, not an elder's: no elderId needed
   delete process.env.AUTO_DIAL
   delete process.env.ELDER_PHONE
   expect(await mode()).toEqual({ phone: false, autoDial: false })
@@ -195,4 +196,35 @@ test("the server never rings the phone again while its call is live; the call's 
   expect((await post("/api/el/post-call", body, signed(body))).status).toBe(200) // the post-call webhook ends it
   expect((await post("/api/call/dial", { elderId: ID })).status).toBe(200)
   expect(outbound()).toHaveLength(2)
+})
+
+test("an inbound call: the elder's number gets his details and a thanks-for-calling greeting, and the call starts", async () => {
+  const body = { caller_id: "+15550000000", called_number: "+15559990000", call_sid: "CA9", conversation_id: "conv_in", agent_id: "agent_test" }
+  expect((await post("/api/el/init", body)).status).toBe(401) // the secret header is required
+  const res = await post("/api/el/init", body, { "x-unc-secret": SECRET })
+  expect(res.status).toBe(200)
+  const out = await res.json()
+  expect(out.type).toBe("conversation_initiation_client_data")
+  expect(out.dynamic_variables).toMatchObject({ elder_id: ID, elder_first_name: "Joe", greeting: "Hi Joe, it's Troska. Thanks for calling. What can I do for you?" })
+  expect(out.dynamic_variables.elder_context).toContain("Joe called you this time")
+  expect(out.dynamic_variables.elder_context).not.toContain("not on file")
+  const s = await state()
+  expect(s.callState).toBe("in_progress")
+  expect(s.timeline.at(-1)).toMatchObject({ kind: "note", text: "Joe called Troska" })
+  expect((await post("/api/call/dial", { elderId: ID })).status).toBe(409) // he is on the phone: never ring him over it
+})
+
+test("an inbound call from an unknown number asks the agent to confirm who is speaking", async () => {
+  const res = await post("/api/el/init", { caller_id: "+14155550123" }, { "x-unc-secret": SECRET })
+  expect((await res.json()).dynamic_variables.elder_context).toContain("not on file for Joe")
+})
+
+test("the greeting fits the call: check-in, recheck or the elder calling", async () => {
+  const { greeting } = await import("./elevenlabs")
+  expect(greeting(await state())).toBe("Hi Joe, it's Troska calling for your check-in. How are you feeling today?")
+  await elder(ID).setStatus("watch", "dizzy")
+  expect(greeting(await state())).toBe("Hi Joe, it's Troska calling back to check on you. How are you feeling now?")
+  const dial = await post("/api/call/dial", { elderId: ID })
+  expect(dial.status).toBe(200)
+  expect(JSON.parse(String(outbound()[0].init.body)).conversation_initiation_client_data.dynamic_variables.greeting).toContain("calling back")
 })

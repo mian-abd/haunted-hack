@@ -45,7 +45,7 @@ function done(msgs: Ev[]): boolean {
     && ofType(msgs, "family_message").length >= familyWanted(msgs)
 }
 
-console.log(`Unc e2e · ${new Date().toISOString()}\n`)
+console.log(`Troska e2e · ${new Date().toISOString()}\n`)
 const h0 = await health().catch(() => null)
 if (!h0) {
   console.log("FAIL  care-team is not answering on :8788. Start the stack with ./dev.sh first.")

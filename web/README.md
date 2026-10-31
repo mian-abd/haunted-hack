@@ -1,4 +1,4 @@
-# web/: the Unc demo screen
+# web/: the Troska demo screen
 
 ## Contract deviations
 
@@ -11,12 +11,12 @@ None. Two choices the contract leaves open:
 
 A single-screen Vite + React + TypeScript app on **:5173**. It is the split view from PLAN.md "Demo (the centerpiece)":
 
-- **Top bar:** the Unc brand and an elder status card. The card shows name, age and conditions. It has an ok / watch / urgent pill with `statusReason`, the meds with Taken / Missed badges, and a countdown to `nextCheckInAt`. A connection dot reads Live, Polling, Server offline or Mock data.
+- **Top bar:** the Troska brand and an elder status card. The card shows name, age and conditions. It has an ok / watch / urgent pill with `statusReason`, the meds with Taken / Missed badges, and a countdown to `nextCheckInAt`. A connection dot reads Live, Polling, Server offline or Mock data.
 - **Left, the call panel:** four states.
   - Idle: a **Start check-in** button.
   - Ringing: when the actor broadcasts `call_due` or `callState` is `"due"`, it shows "Incoming check-in call for Grandpa Joe" and an **Answer** button. The click is the user gesture the browser needs for the mic and audio.
   - Connecting.
-  - In a call: a live "What Unc heard" list (meds, symptoms, refills, teach-back, summary), a mic level meter and **Hang up**. No transcript is shown on screen (summaries only, a product decision); the voice transcript reducer still runs in `voice.ts`.
+  - In a call: a live "What Troska heard" list (meds, symptoms, refills, teach-back, summary), a mic level meter and **Hang up**. No transcript is shown on screen (summaries only, a product decision); the voice transcript reducer still runs in `voice.ts`.
 - **Right, the Care Feed:** three lanes for Doctor, Pharmacy and Family. They hold `agent_msg` events grouped by `data.lane`, newest on top, and new cards animate in. Under the lanes, the **Agent thread** lists every `agent_msg` in order, as from → to. Above the lanes, the `med`, `symptom`, `teach_back`, `vitals` and `status` events show as color-coded chips.
 - **Demo controls** (top right, collapsible): Reset demo, Check-in in 15 s, Simulate vitals spike, Run scripted demo.
 
@@ -63,7 +63,7 @@ All three go through one pure reducer (`src/state.ts`). Each reconnect asks for 
 4. On `response.done`, each `function_call` goes to `POST /api/tool { elderId, name, args }`. The page sends `conversation.item.create { type: "function_call_output", call_id, output }` for each call, then one `response.create`.
 5. Transcripts:
    - Joe's turn starts as a placeholder on `input_audio_buffer.speech_started`. Then `conversation.item.input_audio_transcription.delta` and `.completed` fill it in.
-   - Unc's turn comes from `response.output_audio_transcript.delta` and `.done`.
+   - Troska's turn comes from `response.output_audio_transcript.delta` and `.done`.
 6. After `end_call`, the page hangs up when the goodbye audio finishes (`output_audio_buffer.stopped`), or after 12 s at most.
 7. The page calls `POST /api/call/start` once the connection is up.
 

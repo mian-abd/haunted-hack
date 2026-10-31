@@ -1,8 +1,10 @@
-# Unc — an AI care team for aging parents
+# Troska — an AI care team for aging parents
 
 Haunted Hacks: Real-Time AI Edition · Oct 31, 2026 · **submission 4:00 PM** (Builderbase)
 
 > **13:20 change:** the check-in is now a **real phone call**: an ElevenLabs agent calls Grandpa from our Twilio number. Only the voice layer changes; the actor and the care team stay as they are. See [Decisions](#decisions).
+>
+> **14:50 status:** the product is named **Troska** (was "Unc"). The backend is live end to end: the ElderActor runs in **Terse cloud**, **Supabase** is the system of record, and the phone works **both ways** (Troska calls Grandpa, and Grandpa can call Troska). Facts and figures for the demo: [demo.md](demo.md).
 
 ## One-liner
 
@@ -114,9 +116,10 @@ Rule: reassign arrays and objects instead of mutating them, or Terse will not pe
 - `POST /api/demo/schedule` `{ elderId, inSeconds }`
 - `POST /api/demo/vitals` `{ elderId, heartRate, note? }`: logs a `vitals` event, then escalates
 - `POST /api/call/start` `{ elderId }` · `POST /api/call/end` `{ elderId, summary, mood? }`
-- `POST /api/call/dial` `{ elderId }` → `{ conversationId, callSid }`: places the check-in call with ElevenLabs `POST /v1/convai/twilio/outbound-call` (`agent_id`, `agent_phone_number_id`, `to_number`), passing `elder_id`, `elder_name`, `meds` and `family_name` in `conversation_initiation_client_data.dynamic_variables`, then calls `startCall()`. Dial once per `call_due`: the actor re-arms alarms after a restart. It dials only `ELDER_PHONE` from the server env, never a number from the request, and refuses while a call is dialing or in progress. Keep `ELDER_PHONE` out of logs, the timeline (it is broadcast and archived), dynamic variables and seed files.
+- `POST /api/call/dial` `{ elderId }` → `{ conversationId, callSid }`: places the check-in call with ElevenLabs `POST /v1/convai/twilio/outbound-call` (`agent_id`, `agent_phone_number_id`, `to_number`), passing `elder_id`, `elder_first_name`, `elder_context` (profile, meds, status) and `greeting` in `conversation_initiation_client_data.dynamic_variables`, then calls `startCall()`. Dial once per `call_due`: the actor re-arms alarms after a restart. It dials only `ELDER_PHONE` from the server env, never a number from the request, and refuses while a call is dialing or in progress. Keep `ELDER_PHONE` out of logs, the timeline (it is broadcast and archived), dynamic variables and seed files.
 - `POST /api/el/tool/:name` `{ ...tool args, elder_id? }` → `{ output }`: the ElevenLabs webhook tools. Rejects requests without the `x-unc-secret` header matching `EL_TOOL_SECRET` (the tunnel makes this route public), then runs the same tool code as `/api/tool`. `elder_id` defaults to `grandpa-joe`.
-- `POST /api/el/post-call` (optional): the ElevenLabs `post_call_transcription` webhook. Verify the `ElevenLabs-Signature` header, log `analysis.transcript_summary` to the timeline, and archive the transcript to Supabase `calls`.
+- `POST /api/el/post-call`: the ElevenLabs `post_call_transcription` webhook. Verify the `ElevenLabs-Signature` header, log `analysis.transcript_summary` to the timeline, end a call that is still open, and archive the transcript to Supabase `calls`.
+- `POST /api/el/init` (header `x-unc-secret`): the conversation initiation webhook for **inbound** calls (the elder calls our number). ElevenLabs posts `{ caller_id, called_number, call_sid, conversation_id }` while the phone rings. The server starts the call on the actor ("Joe called Troska"), and answers with `{ type: "conversation_initiation_client_data", dynamic_variables: { elder_id, elder_first_name, elder_context, greeting } }`. Without these variables, ElevenLabs drops the call ("Missing required dynamic variables"). A number other than `ELDER_PHONE` still gets the demo elder, and the agent first confirms who it is talking to.
 
 ### Voice-agent tools (webhook tools on the ElevenLabs agent, plus `web/` for the browser fallback; executed by `server/`)
 
@@ -130,11 +133,15 @@ On the phone, the agent's built-in `end_call` hangs up after our `end_call` tool
 
 ### ElevenLabs agent (the phone voice)
 
-- Our Twilio number (label "HH") is imported in ElevenLabs, with inbound and outbound both on. It is currently assigned to the stock "Customer Support" template agent.
-- **Create a new agent, "Unc check-in", and assign the HH number to it.** Don't edit the template: its workflow nodes add support and billing prompts.
-- Prompt: the text `buildInstructions()` produces in `web/src/voice.ts` (check-in plus teach-back), with the elder's details replaced by `{{elder_name}}`, `{{meds}}` and `{{family_name}}`. First message: "Hi {{elder_name}}, it's Unc calling for your check-in. Is now a good time?"
-- Tools: the five tools above as webhook tools → `https://<tunnel>/api/el/tool/<name>`, with an `x-unc-secret` header stored as an ElevenLabs secret. Turn on the built-in `end_call`.
-- Post-call webhook (optional) → `https://<tunnel>/api/el/post-call`.
+- The agent **"Troska check-in"** answers our Twilio number "HH" (inbound and outbound). `cd server && PUBLIC_URL=https://<tunnel> bun run el:setup` creates or updates all of it, and is safe to re-run after every tunnel restart:
+  - the prompt and its five webhook tools
+  - the stored `x-unc-secret` secret
+  - the post-call webhook (its secret goes into `server/.env`)
+  - the inbound-call webhook
+  - the phone-number assignment
+- Prompt: the check-in plus teach-back (`server/scripts/elevenlabs-agent.ts`). The elder's details arrive per call in `{{elder_context}}`. The first message is `{{greeting}}`, which depends on the call: "calling for your check-in", "calling back to check on you" (a recheck), or "Thanks for calling" (the elder called us).
+- Tools: the five tools above as webhook tools → `https://<tunnel>/api/el/tool/<name>`. The closing-summary tool is named `save_call_summary`, because `end_call` is the built-in hang-up, which is also on.
+- Webhooks: post-call → `https://<tunnel>/api/el/post-call`. Inbound calls → `https://<tunnel>/api/el/init`.
 - Agent and phone-number ids go in `server/.env`, never in git. The tunnel is cloudflared or ngrok to `http://127.0.0.1:8787`; through it only `/api/el/*` answers (secret or signature checked), and everything else, including `/api/realtime-token` and `/api/call/dial`, gets 403.
 - The meds in `{{elder_context}}` name each medicine first ("Amlodipine: 5 mg at 08:00"), and the prompt gives the current time and asks only about doses whose time has passed (as `buildInstructions()` does). The server also maps "Amlodipine 5 mg" to the listed med.
 
@@ -181,6 +188,21 @@ Tables: `patients`, `prescriptions`, `clinical_notes`, `calls`, `care_events` (w
 - **13:20 Phone call through ElevenLabs.** The team tested an ElevenLabs agent calling out from our Twilio number, and it works. It replaces OpenAI Realtime as the main voice layer, and that's all it replaces. The actor (alarm, memory) and the care team on Agent Relay stay as they are; they are the two prize stories. We don't use ElevenLabs agent transfers for the doctor or pharmacy, because that would duplicate Agent Relay. The browser OpenAI Realtime call stays as the fallback.
 - **13:20 One care-team.** The `care-team/` on this branch ships. Mian adds two things from `mian/ych-3-care-team`, which stays as a reference and is not merged:
   - **A safety floor:** danger signs (chest pain, fainting, a fall, slurred speech, heart rate ≥130 or ≤40, severity high) are always urgent. The LLM can raise urgency but never lower it.
-  - **One case per call:** escalations for an elder within 3 minutes join the open case, so one call makes one thread and each medication is refilled once. `e2e.ts` still expects one case per escalating tool: update its case checks when this merges.
-- **13:55 Transcript.** No raw transcript on screen, on either voice path: the call panel lists what Unc heard (tool events), and the phone call adds a short recap after hang-up. The full transcript only goes to the Supabase archive.
+  - **One case per call:** escalations for an elder within 3 minutes join the open case, so one call makes one thread and each medication is refilled once. (Done: `e2e.ts` checks one case per call, and every care-team message carries `data.trigger`.)
+- **13:55 Transcript.** No raw transcript on screen, on either voice path: the call panel lists what Troska heard (tool events), and the phone call adds a short recap after hang-up. The full transcript only goes to the Supabase archive.
 - **13:55 Symptom cases carry the call's missed meds.** `report_symptom` adds `details.missedMeds` (e.g. "Amlodipine: not taken (Ran out two days ago)"), and the call covers meds before symptoms, so the doctor can link the dizziness to the missed pill and order the refill itself (the doctor → pharmacy hop on Agent Relay).
+- **14:05 Supabase is the system of record.** The schema and seed are applied to the team project (`supabase/apply.ts`, over the IPv4 pooler).
+  - The demo reset and the doctor read the hospital record from it.
+  - `calls` stores every call, with `started_at`, summary, mood and transcript.
+  - `care_events` stores every tool event, every Agent Relay message and every call ending.
+  - Tests never touch it.
+- **14:15 The ElderActor runs in Terse cloud** (org "unc", project `unc-actor`). The CLI has no local runtime for Windows, and the cloud lets any laptop run the demo. Callers set `TERSE_ACTOR_URL` and `TERSE_API_KEY`. The durability flex (Demo, step 6) restarts our server, because the state lives in the actor.
+- **14:26 First real phone call.** It worked end to end, and it showed that a mid-call urgent recheck could ring the phone again. That is now blocked in both the actor and the server.
+- **14:45 The elder can call Troska.** Inbound calls to the number were dropped ("Missing required dynamic variables"). Now `/api/el/init` answers them with the elder's details (see `server/` API).
+- **15:05 Caller profiles: a phone number is a person.** Before this, every inbound caller was treated as Grandpa Joe.
+  - Every call, in or out, finds its person in Supabase by phone number (`patients.phone`, migration `20261031150000_caller_profiles.sql`).
+  - A number we haven't met gets a new profile (`caller-<digits>`). The agent asks who they are, and saves it with the new `save_profile` tool.
+  - The agent's context carries the person's last 3 calls and recent symptoms from Supabase, so it remembers them across calls, numbers and restarts.
+  - Outbound calls ring the number on the profile.
+  - Safety: an overdose is now a danger sign, and the prompt makes the agent log an emergency (`report_symptom`, high) *before* telling the caller to dial 911. A real test call had shown the agent skipping the log.
+- **14:50 Renamed Unc → Troska** in every user-facing place: the voice agent, greetings, family texts, the web app and the docs. Internal identifiers keep their names, because renaming them would break the live setup for no visible gain: the `x-unc-secret` and `x-unc-key` headers, the `unc-*` package names and the Terse project `unc-actor`.

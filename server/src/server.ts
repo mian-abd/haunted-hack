@@ -1,7 +1,7 @@
 // server/: HTTP API from PLAN.md. Bun.serve on :8787, no framework.
 import { elder, isFake, prepareWebsocket, type Med, type Profile } from "./actor"
 import { callMode, dial, phoneCallEnded, startAutoDial, webhook } from "./elevenlabs"
-import { archiveCall, archiveEvent, recordFor, supabaseAuth } from "./store"
+import { archiveCall, archiveEvent, profileFields, recordFor, saveProfile, supabaseAuth } from "./store"
 import { clamp, organizeRecord, toRows } from "./organize"
 export { supabaseAuth } from "./store"
 
@@ -48,6 +48,8 @@ const routes: Record<string, (elderId: string, b: Body) => Promise<unknown>> = {
   "POST /api/records/organize": (id, b) => organizeDoc(id, b),
   "POST /api/records/apply": (id, b) => applyDoc(id, b),
 }
+// Routes about the server's own configuration, with no elder behind them: `elderId` is accepted but not required.
+const NO_ELDER = new Set(["GET /api/call/mode"])
 
 export async function handle(req: Request): Promise<Response> {
   const origin = req.headers.get("origin") ?? ""
@@ -65,11 +67,11 @@ export async function handle(req: Request): Promise<Response> {
     if (req.method === "GET" && pathname === "/api/realtime-token") res = await realtimeToken()
     else if (pathname.startsWith("/api/el/")) res = await webhook(req, pathname, { runTool, endCall }) // ElevenLabs phone agent
     else {
-      const route = routes[`${req.method} ${pathname}`]
+      const key = `${req.method} ${pathname}`, route = routes[key]
       if (!route) res = json({ error: "not found" }, 404)
       else {
         const b: Body = req.method === "POST" ? await req.json().catch(() => bad("body must be JSON")) : Object.fromEntries(searchParams)
-        const out = await route(need(b?.elderId, "elderId"), b)
+        const out = await route(NO_ELDER.has(key) ? String(b?.elderId ?? "") : need(b?.elderId, "elderId"), b)
         res = out instanceof Response ? out : json(out)
       }
     }
@@ -119,7 +121,10 @@ async function runTool(elderId: string, name: string, a: Body): Promise<string> 
     }
     case "request_refill": {
       const med = need(a.med, "med")
-      void archiveEvent(elderId, { kind: "note", from: "elder", text: `Refill requested: ${med}`, data: { med, refill: true } })
+      // The actor remembers the ask even if the care team is down; a `note` is kept but not shown as a chip or lane card.
+      const ev = { kind: "note" as const, from: "elder" as const, text: `Refill requested: ${med}`, data: { med, refill: true } }
+      await actor.logEvent(ev)
+      void archiveEvent(elderId, ev)
       escalate({ elderId, kind: "refill", reason: `Refill needed: ${med}`, details: { med } })
       return `Refill request sent to the pharmacy for ${med}.`
     }
@@ -128,6 +133,15 @@ async function runTool(elderId: string, name: string, a: Body): Promise<string> 
       await endCall(elderId, summary, a.mood)
       escalate({ elderId, kind: "summary", reason: summary, details: { mood: a.mood } })
       return "Call ended. Summary sent to the family."
+    }
+    case "save_profile": { // the phone agent learns who a caller is (name, age, conditions, family) and keeps it in Supabase
+      const fields = profileFields(a)
+      if (!Object.keys(fields).length) bad("give at least one of name, age, conditions, family_name, family_relation, family_phone")
+      await saveProfile(elderId, fields)
+      const ev = { kind: "note" as const, from: "elder" as const, text: `Profile updated: ${Object.keys(fields).join(", ")}`, data: { profile: fields } }
+      await actor.logEvent(ev)
+      void archiveEvent(elderId, ev)
+      return `Saved to their profile: ${Object.keys(fields).join(", ")}.`
     }
   }
   return bad(`unknown tool: ${name}`)
@@ -270,7 +284,8 @@ async function realtimeToken(): Promise<Response> {
   // GA Realtime: mint a short-lived client secret (ek_...). The browser adds instructions and tools via session.update.
   const r = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
     method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    // The safety identifier is bound to the ephemeral token (docs: voice-webrtc), so the browser never sends it.
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "OpenAI-Safety-Identifier": "unc-browser-call" },
     body: JSON.stringify({
       session: {
         type: "realtime",

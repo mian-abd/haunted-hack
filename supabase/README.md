@@ -1,6 +1,6 @@
 # supabase/
 
-The Postgres schema, the fictional demo seed data and the setup steps for Unc's Supabase project. It holds hospital records (patients, prescriptions, clinical notes), the call archive and the care team history, with RLS per family.
+The Postgres schema, the fictional demo seed data and the setup steps for Troska's Supabase project. It holds hospital records (patients, prescriptions, clinical notes), the call archive and the care team history, with RLS per family.
 
 Nothing in this folder connects to the remote project. Only the team's Supabase owner applies these files, by hand.
 

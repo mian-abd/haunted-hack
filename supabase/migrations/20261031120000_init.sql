@@ -1,4 +1,4 @@
--- Unc: hospital records, call archive and care events. See supabase/README.md.
+-- Troska: hospital records, call archive and care events. See supabase/README.md.
 -- Safe to re-run: tables and indexes use "if not exists", and each policy is dropped before it is created.
 -- RLS: a signed-in family member (a family_members row for that patient) can SELECT that patient's rows.
 -- anon has no grants. There are no write policies. Services write with the service role key, which bypasses RLS.

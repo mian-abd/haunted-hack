@@ -18,7 +18,7 @@ Vite + React + TypeScript single-page app in `web/`, with two routes: `/` is the
 
 ## Product Purpose
 
-Unc gives an aging parent a care team. A voice agent makes check-in calls to the elder: it confirms medications, runs teach-back, and notices when something is off. Behind the call, doctor, pharmacy and family agents work the case directly with each other. A durable memory per elder keeps the whole story and schedules the next call.
+Troska gives an aging parent a care team. A voice agent makes check-in calls to the elder: it confirms medications, runs teach-back, and notices when something is off. Behind the call, doctor, pharmacy and family agents work the case directly with each other. A durable memory per elder keeps the whole story and schedules the next call.
 
 Mission line: **"No parent ages alone."**
 
@@ -45,12 +45,12 @@ Three equal pillars that a plain "AI that calls grandma" cannot claim together:
 - No raw transcript on screen. During a call the dashboard shows only what the agent extracted: meds confirmed, symptoms reported, teach-back results. Privacy comes first.
 - If voice or network fails, a scripted mode replays the storyline through the same UI, labeled "scripted" in small text.
 - Built with Terse Durable Actors, Agent Relay, Supabase and OpenAI Realtime.
-- Unc never diagnoses; it escalates to humans.
-- Undecided: the final product name. "Unc" is a placeholder.
+- Troska never diagnoses; it escalates to humans.
+- Name: Troska (renamed from the working name "Unc" on Oct 31, 2:50 PM).
 
 ## Brand Commitments
 
-- Name: "Unc" (placeholder, may change).
+- Name: "Troska" (renamed from "Unc", Oct 31).
 - Voice: confident startup. Crisp, outcome- and mechanism-forward, no jargon dumps.
 - Must not feel: like a generic AI-SaaS template, clinical or cold, too busy, or childish and cutesy.
 - No Halloween theme, even though it's a Halloween event.

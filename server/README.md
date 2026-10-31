@@ -1,4 +1,4 @@
-# server/ — Unc HTTP API (Bun, :8787)
+# server/ — Troska HTTP API (Bun, :8787)
 
 The backend that sits between the browser and everything else. It mints OpenAI Realtime keys for the voice call, runs
 the voice agent's tools against the `ElderActor`, sends escalations to the care team, and archives finished calls to
@@ -84,8 +84,8 @@ bun run check       # tsc --noEmit (downloads typescript@5.9.3 through bunx)
 
 ## API
 
-All `POST` bodies are JSON. Every route except `/api/realtime-token` needs `elderId` (in the body, or the query for
-`GET`). The demo id is `grandpa-joe`. CORS allows `http://localhost:5173` and `http://127.0.0.1:5173`, and the server
+All `POST` bodies are JSON. Every route except `/api/realtime-token` and `/api/call/mode` needs `elderId` (in the body, or
+the query for `GET`). The demo id is `grandpa-joe`. CORS allows `http://localhost:5173` and `http://127.0.0.1:5173`, and the server
 answers `OPTIONS` preflights.
 
 | Route | Does | Returns |
@@ -99,6 +99,7 @@ answers `OPTIONS` preflights.
 | `POST /api/demo/vitals` `{ elderId, heartRate, note? }` | Logs a `vitals` event, then escalates `kind: "vitals"` | `{ ok: true }` |
 | `POST /api/call/start` `{ elderId }` | `startCall()` | `{ ok: true }` |
 | `POST /api/call/end` `{ elderId, summary, mood? }` | `endCall()` and the Supabase archive. A missing summary becomes `"Call ended."` | `{ ok: true }` |
+| `GET /api/call/mode` | Whether the phone path is configured (all four ElevenLabs vars set) and whether `AUTO_DIAL=1`. web/ uses it to decide if "Start check-in" rings the phone or opens the browser call | `{ phone, autoDial }` |
 | `POST /api/call/dial` `{ elderId }` | ElevenLabs `POST /v1/convai/twilio/outbound-call` from our Twilio number to `ELDER_PHONE`, then `startCall()` and a `note` "Calling Joe's phone". 409 while a call is in progress; 502 with ElevenLabs' message if it refuses | `{ conversationId, callSid }` |
 | `POST /api/el/tool/:name` (header `x-unc-secret`) | The ElevenLabs webhook tools: runs voice tool `:name` (table below) with the JSON body as its args. `elder_id` in the body picks the elder | `{ output }` |
 | `POST /api/el/post-call` (header `ElevenLabs-Signature`) | `post_call_transcription`: logs a `note` "Call recap: …" from `analysis.transcript_summary`. `call_initiation_failure`: logs why. Either one ends a call that is still in progress | `{ ok: true }` |
@@ -124,7 +125,7 @@ Columns follow `supabase/migrations/20261031120000_init.sql`. The archive is als
 
 ## Phone check-in (ElevenLabs + Twilio)
 
-The ElevenLabs agent "Unc check-in" talks to the elder on a real phone call from our Twilio number, and calls the
+The ElevenLabs agent "Troska check-in" talks to the elder on a real phone call from our Twilio number, and calls the
 same five voice tools as the browser call, as webhook tools on `/api/el/tool/*`. Code: `src/elevenlabs.ts`.
 
 1. Expose the server: `cloudflared tunnel --url http://localhost:8787` (or ngrok). Copy the `https://` URL.

@@ -1,4 +1,4 @@
-// Applies the schema and the demo seed to a Postgres database: the remote Supabase project, or a local one.
+// Applies every migration (in file-name order) and the demo seed to a Postgres database: the remote Supabase project, or a local one.
 //   SUPABASE_DB_URL=postgresql://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres bun supabase/apply.ts
 // Same effect as pasting both files into the SQL editor (README "Apply to the remote project"). Both are safe to re-run.
 // The connection string holds the database password: pass it in the shell, never commit it.
@@ -12,7 +12,8 @@ if (!url) {
 
 const db = new SQL(url)
 try {
-  for (const file of ["migrations/20261031120000_init.sql", "seed.sql"]) {
+  const migrations = [...new Bun.Glob("migrations/*.sql").scanSync({ cwd: import.meta.dir })].map(f => f.replaceAll("\\", "/")).sort()
+  for (const file of [...migrations, "seed.sql"]) { // every migration in order, then the seed
     await db.unsafe(await Bun.file(new URL(file, import.meta.url)).text()).simple()
     console.log(`applied ${file}`)
   }

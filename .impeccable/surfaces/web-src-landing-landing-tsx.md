@@ -15,7 +15,7 @@ related_targets: ["web/src/main.tsx","web/src/CallPanel.tsx","web/src/CareFeed.t
 
 ## Direction contract
 
-THESIS: The Unc Daily. Every check-in call prints a fresh edition of the family's paper about their parent. The doctor, pharmacy and family agents are its reporters, and their Agent Relay dispatches are the news. It refuses the category default of a SaaS hero over feature cards.
+THESIS: The Troska Daily. Every check-in call prints a fresh edition of the family's paper about their parent. The doctor, pharmacy and family agents are its reporters, and their Agent Relay dispatches are the news. It refuses the category default of a SaaS hero over feature cards.
 
 OWN-WORLD: Black ink (#141414) on cool rag paper (#ECE9E1), with grain and uneven plate pressure done as SVG filters. One spot ink, press red (#B3261E), is reserved for stamps (EXTRA, LATE EDITION, WATCH or URGENT) and live markers. The masthead is hand-drawn. IM Fell only for the masthead and display headlines. All body and UI text uses one clean, highly readable face with lining figures, at 18–20px body. Readability first: crisp, generous, and texture never behind body text. The page is built from column rules, boxed notices, and woodcut-style line spot illustrations.
 
@@ -33,5 +33,5 @@ A status change slams a red "EXTRA!" stamp across the Live Edition while the dis
 
 ## Unresolved
 
-- The final product name ("Unc" is a placeholder).
+- The final product name ("Troska" is a placeholder).
 - The demo video URL (P5).
