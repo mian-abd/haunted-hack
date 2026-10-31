@@ -30,7 +30,7 @@ async function api(method: string, path: string, body?: unknown): Promise<any> {
 }
 
 // Fixed half of the prompt. The elder-specific half arrives per call as {{elder_context}} (src/elevenlabs.ts).
-const PROMPT = `You are Unc, a warm care companion making a scheduled check-in phone call to an older adult.
+const PROMPT = `You are Troska, a warm care companion making a scheduled check-in phone call to an older adult.
 
 {{elder_context}}
 
@@ -113,7 +113,7 @@ async function placeholders(): Promise<Record<string, string>> {
 async function upsertAgent(toolIds: string[]): Promise<string> {
   const conversation_config = {
     agent: {
-      first_message: "Hi {{elder_first_name}}, it's Unc calling for your check-in. How are you feeling today?",
+      first_message: "Hi {{elder_first_name}}, it's Troska calling for your check-in. How are you feeling today?",
       language: "en",
       dynamic_variables: { dynamic_variable_placeholders: await placeholders() },
       prompt: {

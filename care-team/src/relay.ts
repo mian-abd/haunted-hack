@@ -61,7 +61,7 @@ export async function connectAgentRelay(): Promise<Relay> {
     info: { baseUrl: BASE, workspace },
     async ensureChannel(name) {
       if (joined.has(name)) return
-      await call(tokens.caretaker, "POST", "/channels", { name, topic: "Unc care team" }).catch((e) => { if (e.status !== 409) throw e })
+      await call(tokens.caretaker, "POST", "/channels", { name, topic: "Troska care team" }).catch((e) => { if (e.status !== 409) throw e })
       for (const a of AGENTS) await call(tokens[a], "POST", `/channels/${name}/join`)
       joined.add(name)
     },

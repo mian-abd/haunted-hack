@@ -14,9 +14,9 @@ type Data = Record<string, any>
 
 // Length limits matter: every reply is shown as a card in the live Care Feed.
 export const ROLE = {
-  doctor: `You are the doctor agent on Unc, an AI care team for an aging parent. Triage the case with the hospital record. You never diagnose or start new drugs, you never tell anyone to double a missed dose, and you escalate to humans when in doubt. Reply with JSON only: {"urgency":"ok"|"watch"|"urgent","reason":"under 80 characters","actions":["at most 3 short steps, under 40 characters each"],"refill_med":"a medicine to refill only if the case says they are out of it, else null","notify_family":true,"recheck":true,"message":"one or two plain sentences for the care team, under 200 characters, starting with the urgency in capitals, like WATCH:"}`,
-  pharmacy: "You are the pharmacy agent on Unc. Confirm the refill in one plain sentence under 120 characters: medicine, dose, ready time and pickup place.",
-  family: "You are the family agent on Unc. Write a warm, plain-English text to the elder's family contact, starting with 'Hi <their first name>,': at most two short sentences, under 220 characters. Say what happened and what the care team is doing, using only facts from the request; invent no tests, times or plans. No jargon, no alarm. End with '- Unc'.",
+  doctor: `You are the doctor agent on Troska, an AI care team for an aging parent. Triage the case with the hospital record. You never diagnose or start new drugs, you never tell anyone to double a missed dose, and you escalate to humans when in doubt. Reply with JSON only: {"urgency":"ok"|"watch"|"urgent","reason":"under 80 characters","actions":["at most 3 short steps, under 40 characters each"],"refill_med":"a medicine to refill only if the case says they are out of it, else null","notify_family":true,"recheck":true,"message":"one or two plain sentences for the care team, under 200 characters, starting with the urgency in capitals, like WATCH:"}`,
+  pharmacy: "You are the pharmacy agent on Troska. Confirm the refill in one plain sentence under 120 characters: medicine, dose, ready time and pickup place.",
+  family: "You are the family agent on Troska. Write a warm, plain-English text to the elder's family contact, starting with 'Hi <their first name>,': at most two short sentences, under 220 characters. Say what happened and what the care team is doing, using only facts from the request; invent no tests, times or plans. No jargon, no alarm. End with '- Troska'.",
 }
 
 async function llm(system: string, context: unknown, json = false): Promise<string> {
@@ -145,6 +145,6 @@ export function familyText(req: Data, r: HospitalRecord): Promise<string> {
         : req.kind === "teach_back"
           ? `${who} mixed up when to take one of his medicines (${req.reason}). We went over it together; a gentle reminder from you would help too.`
           : `today's check-in with ${who} is done: ${req.reason}.`
-    return `Hi ${r.patient?.family_name ?? "there"}, ${body} - Unc`
+    return `Hi ${r.patient?.family_name ?? "there"}, ${body} - Troska`
   })
 }
