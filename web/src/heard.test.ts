@@ -6,12 +6,12 @@ import { mockFixture } from "./mock.ts"
 test("every scripted tool call becomes one fact row, in order, with no transcript text", () => {
   const steps = storyline(mockFixture(0))
   const rows = steps.flatMap((s, i) => ("tool" in s ? [heard(`script-${i}`, ...s.tool)] : []))
-  expect(rows.map(r => r?.kind)).toEqual(["symptom", "med", "refill", "med", "teach_back", "summary"])
-  expect(rows[0]).toMatchObject({ text: "Dizzy since this morning", detail: "medium severity", tone: "warn" })
-  expect(rows[1]).toMatchObject({ text: "Amlodipine missed", detail: "Ran out two days ago", tone: "bad" })
-  expect(rows[2]).toMatchObject({ text: "Amlodipine", tone: "neutral" })
-  expect(rows[3]).toMatchObject({ text: "Metformin taken", tone: "good" })
-  expect(rows[4]).toMatchObject({ text: "Metformin: mixed up, then corrected", tone: "warn" })
+  expect(rows.map(r => r?.kind)).toEqual(["med", "med", "symptom", "teach_back", "refill", "summary"])
+  expect(rows[0]).toMatchObject({ text: "Amlodipine missed", detail: "Ran out two days ago", tone: "bad" })
+  expect(rows[1]).toMatchObject({ text: "Metformin taken", tone: "good" })
+  expect(rows[2]).toMatchObject({ text: "Dizzy since this morning", detail: "medium severity", tone: "warn" })
+  expect(rows[3]).toMatchObject({ text: "Metformin: mixed up, then corrected", tone: "warn" })
+  expect(rows[4]).toMatchObject({ text: "Amlodipine", tone: "neutral" })
   expect(rows[5]?.detail).toBe("Mood: tired but in good spirits")
 })
 

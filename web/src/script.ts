@@ -12,25 +12,27 @@ export function storyline(s: ElderState): Step[] {
   const family = s.profile?.family.name ?? "your family"
   const bp = s.meds.find(m => /blood pressure/i.test(m.purpose))?.name ?? "Amlodipine"
   const tb = s.meds.find(m => /metformin/i.test(m.name))?.name ?? "Metformin"
+  // Meds before the symptom, so the doctor's case already carries the missed pill; the refill ask comes at the wrap-up,
+  // after the doctor has had time to order it (one case per call then refills each med once).
   return [
-    { say: ["agent", `Hi ${first}, it's Unc with your afternoon check-in. How are you feeling today?`] },
-    { say: ["elder", "Oh, not so great. I've been a little dizzy since this morning."] },
-    { tool: ["report_symptom", { symptom: "Dizzy since this morning", severity: "medium" }] },
-    { say: ["agent", `I'm sorry to hear that. Let's check your medicines. Did you take your ${bp} this morning?`] },
+    { say: ["agent", `Hi ${first}, it's Unc with your afternoon check-in. Let's start with your medicines. Did you take your ${bp} this morning?`] },
     { say: ["elder", "No... I ran out of my blood pressure pills two days ago."] },
     { tool: ["confirm_medication", { med: bp, taken: false, note: "Ran out two days ago" }] },
-    { say: ["agent", "Thank you for telling me. Would you like me to ask the pharmacy for a refill?"] },
-    { say: ["elder", "Yes, please."] },
-    { tool: ["request_refill", { med: bp }] },
-    { say: ["agent", `Done. And did you take your ${tb} with breakfast?`] },
+    { say: ["agent", `Thank you for telling me. And did you take your ${tb} with breakfast?`] },
     { say: ["elder", "Yes, I took that one."] },
     { tool: ["confirm_medication", { med: tb, taken: true }] },
-    { say: ["agent", `Good. In your own words, when do you take your ${tb}?`] },
+    { say: ["agent", "Good. How are you feeling today?"] },
+    { say: ["elder", "Oh, not so great. I've been a little dizzy since this morning."] },
+    { tool: ["report_symptom", { symptom: "Dizzy since this morning", severity: "medium" }] },
+    { say: ["agent", `I'm sorry to hear that. I'll let your doctor know. In your own words, when do you take your ${tb}?`] },
     { say: ["elder", "One in the morning... and one at bedtime?"] },
     { say: ["agent", "Close. The second one goes with dinner, around 7, not at bedtime. Taking it with food is easier on your stomach. Can you say that back to me?"] },
     { say: ["elder", "With breakfast, and with dinner. Got it."] },
     { tool: ["teach_back_result", { med: tb, understood: false, note: "Said bedtime for the evening dose; corrected to with dinner" }] },
-    { say: ["agent", `Perfect. So: you're dizzy, your ${bp} refill is on its way, and ${tb} goes with breakfast and dinner. I'll let your doctor and ${family} know. Please sit down and drink some water. Take care, ${first}.`] },
+    { say: ["agent", `Perfect. Since you're out of ${bp}, shall I ask the pharmacy for a refill?`] },
+    { say: ["elder", "Yes, please."] },
+    { tool: ["request_refill", { med: bp }] },
+    { say: ["agent", `Done. So: you're dizzy, your ${bp} refill is on its way, and ${tb} goes with breakfast and dinner. I'll let your doctor and ${family} know. Please sit down and drink some water. Take care, ${first}.`] },
     { tool: ["end_call", { summary: `Dizzy since this morning; out of ${bp} for two days, refill requested. ${tb} evening dose corrected to with dinner.`, mood: "tired but in good spirits" }] },
   ]
 }
