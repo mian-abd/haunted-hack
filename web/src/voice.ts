@@ -112,6 +112,9 @@ export class VoiceOffline extends Error {}
 export type VoiceSession = { close: () => void; mic: MediaStream; model: string }
 
 const CALLS_URL = "https://api.openai.com/v1/realtime/calls" // GA endpoint; the model is bound to the ephemeral session
+// ?debug in the page URL logs connection states and every Realtime server event type (the headless voice smoke test reads these).
+const DEBUG = typeof location !== "undefined" && new URLSearchParams(location.search).has("debug")
+const debug = (...a: unknown[]) => DEBUG && console.info("[realtime]", ...a)
 
 /** Connects a live call. onEnd fires once, with agentEnded = true when the agent's end_call already closed the call. */
 export async function startVoice(state: ElderState, onEvent: (e: ServerEvent) => void, onEnd: (agentEnded: boolean) => void): Promise<VoiceSession> {
@@ -146,13 +149,18 @@ export async function startVoice(state: ElderState, onEvent: (e: ServerEvent) =>
   }
 
   dc.onopen = () => {
+    debug("datachannel open:", dc.label)
     send(sessionUpdate(state))
     send({ type: "response.create" }) // the agent speaks first, like a real call
   }
   dc.onclose = close
-  pc.onconnectionstatechange = () => pc.connectionState === "failed" && close()
+  pc.onconnectionstatechange = () => {
+    debug("peer connection:", pc.connectionState)
+    if (pc.connectionState === "failed") close()
+  }
   dc.onmessage = async ev => {
     const e: ServerEvent = JSON.parse(ev.data)
+    debug("event:", e.type, e.type === "error" ? JSON.stringify(e.error) : "")
     onEvent(e)
     if (e.type === "error") console.warn("[realtime]", e.error)
     if (e.type === "output_audio_buffer.stopped" && endAfter && e.response_id !== endAfter) close()
