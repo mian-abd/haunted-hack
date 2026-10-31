@@ -1,0 +1,49 @@
+/* Records agent panel: open, single column, hairlines instead of boxes. Tokens come from styles.css. */
+.ro { display: grid; gap: var(--space-6); max-width: var(--measure); color: var(--ink); font-family: var(--font-body); }
+.ro-add, .ro-found { display: grid; gap: var(--space-4); min-width: 0; }
+.ro-h2 { font-family: var(--font-display); font-size: var(--text-h3); }
+.ro-h3 { font-family: var(--font-display); font-size: 21px; }
+.ro-lede { margin: 0; color: var(--ink-2); }
+.ro-label { font-weight: 700; margin-top: var(--space-2); }
+
+.ro-text {
+  width: 100%; min-height: 14rem; padding: var(--space-4); resize: vertical;
+  border: 1.5px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--ink);
+  font: inherit; font-size: var(--text-small); line-height: 1.55;
+}
+.ro-text:focus-visible { border-color: var(--ink); }
+
+.ro-sources { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-3) var(--space-5); }
+.ro-file { cursor: pointer; }
+.ro-file:focus-within { outline: 3px solid var(--focus); outline-offset: 3px; }
+.ro-samples { flex: 1 1 220px; }
+.ro-samples summary {
+  min-height: 44px; display: inline-flex; align-items: center; cursor: pointer;
+  color: var(--ink-2); text-decoration: underline; text-underline-offset: 4px;
+}
+.ro-samples p { margin: var(--space-2) 0; font-size: var(--text-small); }
+.ro-sample-list { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ro-go { justify-self: start; }
+
+.ro-status:empty { display: none; }
+.ro-status p, .ro-error { margin: 0; }
+.ro-working { display: flex; align-items: center; gap: var(--space-3); color: var(--ink-2); }
+.ro-dots { display: inline-flex; gap: 6px; }
+/* the global prefers-reduced-motion rule in styles.css stops this, leaving three still dots */
+.ro-dots span { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: ro-breathe 1.4s ease-in-out infinite; }
+.ro-dots span:nth-child(2) { animation-delay: 0.2s; }
+.ro-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes ro-breathe { 0%, 100% { opacity: 0.25; transform: scale(0.8); } 50% { opacity: 1; transform: none; } }
+.ro-saved { color: var(--ok); font-weight: 700; }
+.ro-error { color: var(--attention); font-weight: 700; }
+
+.ro-source { margin: 0; font-size: var(--text-small); }
+.ro-group { display: grid; gap: var(--space-2); padding-top: var(--space-4); border-top: 1px solid var(--line); }
+.ro-list { list-style: none; margin: 0; padding: 0; }
+.ro-list li + li { border-top: 1px solid var(--line); }
+.ro-item { display: flex; align-items: flex-start; gap: var(--space-3); min-height: 44px; padding: var(--space-2) 0; cursor: pointer; }
+.ro-item input { flex: none; width: 24px; height: 24px; margin: 2px 0 0; accent-color: var(--ok); cursor: pointer; }
+.ro-item-text { min-width: 0; overflow-wrap: anywhere; }
+.ro-item:has(input:not(:checked)) .ro-item-text { color: var(--ink-2); text-decoration: line-through; }
+.ro-sub { display: block; color: var(--ink-2); font-size: var(--text-small); }
+.ro-found > .btn { justify-self: start; margin-top: var(--space-2); }
