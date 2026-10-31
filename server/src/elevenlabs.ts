@@ -32,6 +32,12 @@ export function elderContext(s: ElderState): string {
   ].filter(Boolean).join("\n")
 }
 
+// GET /api/call/mode: tells web/ whether "Start check-in" rings the phone or opens the browser call.
+export const callMode = () => ({
+  phone: ["ELEVENLABS_API_KEY", "ELEVENLABS_AGENT_ID", "ELEVENLABS_PHONE_NUMBER_ID", "ELDER_PHONE"].every(k => env(k)),
+  autoDial: env("AUTO_DIAL") === "1",
+})
+
 const dialing = new Set<string>()
 
 // POST /api/call/dial: ElevenLabs places the call from our Twilio number, then the actor marks the call started.

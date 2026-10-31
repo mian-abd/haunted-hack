@@ -1,6 +1,6 @@
 // server/: HTTP API from PLAN.md. Bun.serve on :8787, no framework.
 import { elder, isFake, prepareWebsocket, type Med, type Profile } from "./actor"
-import { dial, startAutoDial, webhook } from "./elevenlabs"
+import { callMode, dial, startAutoDial, webhook } from "./elevenlabs"
 
 const ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 const REALTIME_MODEL = "gpt-realtime-2.1" // OpenAI's recommended realtime model for voice agents with tools (Oct 2026)
@@ -37,6 +37,7 @@ const routes: Record<string, (elderId: string, b: Body) => Promise<unknown>> = {
   "POST /api/call/start": async id => { await elder(id).startCall(); return OK },
   "POST /api/call/end": async (id, b) => { await endCall(id, typeof b.summary === "string" && b.summary.trim() ? b.summary : "Call ended.", b.mood); return OK },
   "POST /api/call/dial": id => dial(id),
+  "GET /api/call/mode": async () => callMode(),
 }
 
 export async function handle(req: Request): Promise<Response> {

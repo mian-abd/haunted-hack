@@ -160,3 +160,12 @@ test("auto-dial rings the phone once the alarm makes a call due, and backs off a
   elevenLabs = () => Response.json({ success: true, message: "ok", conversation_id: "conv_2", callSid: "CA2" })
   expect(await autoDialOnce(ID, now + 61_000)).toBe("dialed")
 })
+
+test("call mode tells web/ whether Start check-in rings the phone", async () => {
+  const mode = async () => (await handle(new Request(`http://server.test/api/call/mode?elderId=${ID}`))).json()
+  process.env.AUTO_DIAL = "1"
+  expect(await mode()).toEqual({ phone: true, autoDial: true })
+  delete process.env.AUTO_DIAL
+  delete process.env.ELDER_PHONE
+  expect(await mode()).toEqual({ phone: false, autoDial: false })
+})

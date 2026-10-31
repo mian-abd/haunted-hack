@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { post } from "./api"
+import { ELDER, MOCK, SERVER, getJSON, post } from "./api"
 import { runScript, storyline } from "./script"
 import { mmss, type ElderState, type Tone } from "./state"
 import { VoiceOffline, applyVoiceEvent, functionCalls, startMeter, startVoice, type Line } from "./voice"
@@ -44,6 +44,12 @@ export function useCall(state: ElderState) {
   const tools = useRef(new Map<string, [name: string, args: Args]>()) // tool line id → structured call: a Line only carries a display label
   const latest = useRef(state)
   latest.current = state
+  // Phone mode (server/ has ElevenLabs + Twilio set up): "Start check-in" rings the elder's real phone instead of
+  // opening the browser call. What the phone agent hears arrives through the actor timeline, like everything else.
+  const [phone, setPhone] = useState({ phone: false, autoDial: false })
+  useEffect(() => {
+    if (!MOCK) getJSON(`/api/call/mode?elderId=${ELDER}`).then(setPhone).catch(() => {})
+  }, [])
 
   const begin = (p: Phase) => {
     setNotice("")
@@ -60,7 +66,21 @@ export function useCall(state: ElderState) {
     if (!agentEnded) post("/api/call/end", { summary: "Call ended before the wrap-up.", mood: "unknown" }).catch(() => {})
   }
 
+  async function startPhoneCall() {
+    const first = latest.current.profile?.name.split(" ")[0] ?? "Joe"
+    setNotice("")
+    try {
+      const r = await fetch(`${SERVER}/api/call/dial`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ elderId: ELDER }) })
+      const out = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(out.error ?? `dial returned ${r.status}`)
+      setNotice(`Calling ${first}'s phone…`)
+    } catch (err) {
+      setNotice(`Phone call failed: ${(err as Error).message}`)
+    }
+  }
+
   async function startVoiceCall() {
+    if (phone.phone) return startPhoneCall()
     if (session.current || phase === "connecting") return
     begin("connecting")
     try {
@@ -98,7 +118,7 @@ export function useCall(state: ElderState) {
     const h = t && heard(l.id, ...t)
     return h ? [h] : []
   })
-  return { phase, lines, heard: facts, notice, stream, model, startedAt, startVoiceCall, startScript, hangUp, clear }
+  return { phase, lines, heard: facts, notice, stream, model, startedAt, startVoiceCall, startScript, hangUp, clear, phone: phone.phone, autoDial: phone.autoDial }
 }
 
 const PHONE = "M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.61 21 3 13.39 3 4c0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"
@@ -155,18 +175,28 @@ export function CallPanel({ state, call, now }: { state: ElderState; call: Call;
     stage = (
       <div className="stage">
         <div className="ring"><PhoneIcon /></div>
-        <p className="stage-title">Incoming check-in call for Grandpa {first}</p>
+        <p className="stage-title">{call.phone ? `Check-in due: ${call.autoDial ? "calling" : "call"} Grandpa ${first}'s phone` : `Incoming check-in call for Grandpa ${first}`}</p>
         <button className="btn btn-answer" onClick={call.startVoiceCall}>
-          <PhoneIcon /> Answer
+          <PhoneIcon /> {call.phone ? "Call now" : "Answer"}
         </button>
+      </div>
+    )
+  } else if (call.phone && state.callState === "in_progress") {
+    stage = (
+      <div className="stage">
+        <div className="ring ring-wait"><PhoneIcon /></div>
+        <p className="stage-title">On the phone with {first}</p>
+        <p className="muted">Unc is talking to {first} on his phone. What he says reaches the care team as the agent hears it.</p>
       </div>
     )
   } else {
     stage = (
       <div className="stage">
         <p className="stage-title">{state.callState === "in_progress" ? "A check-in call is in progress" : `Ready when ${first} is`}</p>
-        <p className="muted">Unc calls to check meds, run a teach-back and hear how {first} feels.</p>
-        <button className="btn btn-primary" onClick={call.startVoiceCall}>Start check-in</button>
+        <p className="muted">
+          Unc calls to check meds, run a teach-back and hear how {first} feels.{call.phone ? ` This rings ${first}'s real phone.` : ""}
+        </p>
+        <button className="btn btn-primary" onClick={call.startVoiceCall}>{call.phone ? `Call ${first}'s phone` : "Start check-in"}</button>
       </div>
     )
   }
