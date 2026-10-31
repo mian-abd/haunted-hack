@@ -3,17 +3,20 @@
 import type { HospitalRecord } from "./records"
 
 export const MODEL = process.env.OPENAI_MODEL || "gpt-6-luna"
+// "none" measured fastest on gpt-6-luna with the same output quality; some models (gpt-6.1-sol) only accept "low" and up.
+const REASONING = process.env.OPENAI_REASONING_EFFORT || "none"
 export const brainMode = () => (process.env.OPENAI_API_KEY ? "openai" : "mock")
+export const stats = { fallbacks: 0 } // OpenAI calls that failed and used the mock reply (shown in /health)
 
 export type Urgency = "ok" | "watch" | "urgent"
 export type Decision = { text: string; urgency: Urgency; reason: string; actions: string[]; refillMed: string | null; notifyFamily: boolean; recheck: boolean }
 type Data = Record<string, any>
 
-const ROLE = {
-  caretaker: "You are the caretaker agent on Unc, an AI care team for an aging parent. You hand cases to a doctor, a pharmacy and a family agent. Write one or two short sentences handing this case to the named teammate: who, what happened, what you need. Plain text.",
-  doctor: `You are the doctor agent on Unc. You triage with the hospital record; you never diagnose or start new drugs, and you escalate to humans when in doubt. Never tell anyone to double a missed dose. Reply with JSON only: {"urgency":"ok"|"watch"|"urgent","reason":"short reason","actions":["short steps"],"refill_med":"medication name or null","notify_family":true,"recheck":true,"message":"2-3 plain sentences for the care team"}`,
-  pharmacy: "You are the pharmacy agent on Unc. Confirm the refill in one short sentence with the medication, dose, ready time and pickup place.",
-  family: "You are the family agent on Unc. Write a warm, plain-English text message (2-4 short sentences) to the elder's family contact. No jargon, no alarm: what happened, what the team is doing, when they will hear next. End with '- Unc'.",
+// Length limits matter: every reply is shown as a card in the live Care Feed.
+export const ROLE = {
+  doctor: `You are the doctor agent on Unc, an AI care team for an aging parent. Triage the case with the hospital record. You never diagnose or start new drugs, you never tell anyone to double a missed dose, and you escalate to humans when in doubt. Reply with JSON only: {"urgency":"ok"|"watch"|"urgent","reason":"under 80 characters","actions":["at most 3 short steps, under 40 characters each"],"refill_med":"a medicine to refill only if the case says they are out of it, else null","notify_family":true,"recheck":true,"message":"one or two plain sentences for the care team, under 200 characters, starting with the urgency in capitals, like WATCH:"}`,
+  pharmacy: "You are the pharmacy agent on Unc. Confirm the refill in one plain sentence under 120 characters: medicine, dose, ready time and pickup place.",
+  family: "You are the family agent on Unc. Write a warm, plain-English text to the elder's family contact, starting with 'Hi <their first name>,': at most two short sentences, under 220 characters. Say what happened and what the care team is doing, using only facts from the request; invent no tests, times or plans. No jargon, no alarm. End with '- Unc'.",
 }
 
 async function llm(system: string, context: unknown, json = false): Promise<string> {
@@ -22,7 +25,7 @@ async function llm(system: string, context: unknown, json = false): Promise<stri
     headers: { authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "content-type": "application/json" },
     body: JSON.stringify({
       model: MODEL,
-      reasoning_effort: "low", // latency matters more than depth for these short replies
+      reasoning_effort: REASONING, // latency matters more than depth for these short replies
       messages: [{ role: "system", content: system }, { role: "user", content: JSON.stringify(context) }],
       ...(json ? { response_format: { type: "json_object" } } : {}),
     }),
@@ -39,19 +42,28 @@ async function think<T>(role: string, live: () => Promise<T>, mock: () => T): Pr
   try {
     return await live()
   } catch (e) {
+    stats.fallbacks++
     console.warn(`[brain] ${role}: OpenAI failed, using the mock reply (${(e as Error).message})`)
     return mock()
   }
 }
 
 const nameOf = (r: HospitalRecord, fallback: string) => r.patient?.name ?? fallback
+/** Hard length cap at a word boundary: the safety net when a model ignores its length limit. */
+export const clip = (s: string, max = 240) => (s.length <= max ? s : `${s.slice(0, max - 1).replace(/\s+\S*$/, "")}…`)
 const findMed = (r: HospitalRecord, med?: string) =>
   med ? r.prescriptions.find((p) => p.name.toLowerCase().startsWith(med.toLowerCase().split(" ")[0])) : undefined
 
-export function caseNote(c: Data, r: HospitalRecord): Promise<string> {
-  const details = Object.entries(c.details ?? {}).map(([k, v]) => `${k}: ${v}`).join(", ")
-  return think("caretaker", () => llm(ROLE.caretaker, { to: c.for, case: c, patient: r.patient }),
-    () => `New ${String(c.kind).replace("_", "-")} case for ${nameOf(r, c.elderId)}: ${c.reason}${details ? ` (${details})` : ""}. @${c.for}, can you take it?`)
+/** Drops trailing punctuation so a phrase can be joined into a sentence without "..", ".;" or ". ." */
+export const bare = (s: string) => String(s).trim().replace(/[\s.;,:]+$/, "")
+
+// The caretaker routes and does not need an LLM: a fixed handoff is instant (an LLM hop cost ~3 s per case) and always
+// addresses the right teammate (the LLM version wrote to the daughter instead of the family agent).
+export function caseNote(c: Data, r: HospitalRecord): string {
+  const who = r.patient ? `${r.patient.name}, ${r.patient.age}` : c.elderId
+  const severity = c.details?.severity ? ` (${c.details.severity})` : ""
+  const ask = c.for === "doctor" ? "Doctor, please triage." : c.for === "pharmacy" ? "Pharmacy, please fill it today." : `Family agent, please update ${r.patient?.family_name ?? "the family"}.`
+  return `Case for ${who}: ${bare(c.reason)}${severity}. ${ask}`
 }
 
 export function triage(c: Data, r: HospitalRecord): Promise<Decision> {
@@ -59,8 +71,8 @@ export function triage(c: Data, r: HospitalRecord): Promise<Decision> {
     const j = JSON.parse(await llm(ROLE.doctor, { case: c, record: r }, true))
     return {
       urgency: ["ok", "watch", "urgent"].includes(j.urgency) ? j.urgency : "watch",
-      reason: String(j.reason ?? c.reason),
-      actions: Array.isArray(j.actions) ? j.actions.map(String) : [],
+      reason: clip(bare(j.reason ?? c.reason), 120), // also the status reason on the dashboard
+      actions: Array.isArray(j.actions) ? j.actions.slice(0, 3).map(bare) : [],
       refillMed: j.refill_med ? String(j.refill_med) : null,
       notifyFamily: j.notify_family !== false,
       recheck: Boolean(j.recheck),
