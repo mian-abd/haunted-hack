@@ -2,6 +2,7 @@ import { test, expect, beforeAll } from "bun:test"
 import { localRelay } from "./relay"
 import { fakeActor } from "./actor"
 import { startCareTeam, invalid, channelFor } from "./flow"
+import { dangerSign } from "./brain"
 import type { HospitalRecord } from "./records"
 
 const record: HospitalRecord = {
@@ -132,4 +133,9 @@ test("escalate body validation and channel names", () => {
   expect(invalid({ elderId: "a", kind: "refill", reason: "x", details: [1] })).not.toBeNull()
   expect(channelFor("grandpa-joe")).toBe("care-grandpa-joe")
   expect(channelFor("Grandpa Joe!")).toBe("care-grandpa-joe-")
+})
+
+test("falling asleep is not a fall", () => {
+  expect(dangerSign({ reason: "I fell asleep early last night", details: {} })).toBeNull()
+  expect(dangerSign({ reason: "I fell in the kitchen", details: {} })).toContain("fell in the kitchen")
 })

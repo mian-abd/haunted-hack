@@ -69,7 +69,7 @@ export function startCareTeam(relay: Relay, actor: ActorBridge, records = loadRe
       console.log(`[care-team] case ${caseId}: ${e.details?.med} refill already requested, skipping`)
       return caseId
     }
-    const c ={ type: "case", caseId, elderId: e.elderId, kind: e.kind, reason: e.reason, details: e.details ?? {}, for: owner(e.kind) }
+    const c = { type: "case", caseId, elderId: e.elderId, kind: e.kind, reason: e.reason, details: e.details ?? {}, for: owner(e.kind) }
     void (async () => {
       await relay.ensureChannel(channelFor(e.elderId))
       await send("caretaker", c.for, c.for, await caseNote(c, await records(e.elderId)), c)

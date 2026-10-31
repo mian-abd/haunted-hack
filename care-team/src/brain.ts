@@ -55,7 +55,7 @@ export function caseNote(c: Data, r: HospitalRecord): Promise<string> {
 }
 
 // Safety floor: rule-based danger signs are always urgent. The LLM may raise urgency, never lower it.
-const DANGER = /chest pain|trouble breathing|can'?t breathe|cannot breathe|short(ness)? of breath|faint|passed out|\bfell\b|\ba fall\b|fallen|slurred/i
+const DANGER = /chest pain|trouble breathing|can'?t breathe|cannot breathe|short(ness)? of breath|faint|passed out|\bfell\b(?! asleep)|\ba fall\b|fallen|slurred/i
 
 export function dangerSign(c: Data): string | null {
   const hr = Number(c.details?.heartRate)
