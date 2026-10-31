@@ -196,19 +196,26 @@ async function postCall(req: Request, raw: string, deps: Deps): Promise<Response
 
 // After every phone call, a text to the person Troska talked with (sms.ts). The number is the call's own (ElevenLabs
 // metadata), else the profile's, else ELDER_PHONE. Once per conversation, even if ElevenLabs retries the webhook.
+// Without Twilio set up (the demo): the same text is written and shown on the timeline as "Text to Joe: ...", unsent.
 const texted = new Set<string>()
-export async function textRecap(elderId: string, d: Body, summary: string): Promise<"sent" | "skipped" | "failed"> {
-  if (!smsReady()) return "skipped"
+export async function textRecap(elderId: string, d: Body, summary: string): Promise<"sent" | "mock" | "skipped" | "failed"> {
   const cid = d.conversation_id ? String(d.conversation_id) : ""
   if (cid && texted.has(cid)) return "skipped"
   if (cid) texted.add(cid)
   const row = await patientById(elderId)
   const to = d.metadata?.phone_call?.external_number || row?.phone || (elderId === defaultElder() ? env("ELDER_PHONE") : "")
-  if (!to) return "skipped"
+  const mock = !smsReady()
+  if (!to && !mock) return "skipped"
   const s = await elder(elderId).getState()
   const name = s.profile?.name ?? (row?.name !== "New caller" ? row?.name : undefined)
   const first = name?.split(" ")[0] ?? "there"
   const body = await recapText(first, summary, s.nextCheckInAt)
+  if (mock) {
+    const ev = { kind: "note" as const, from: "system" as const, text: `Text to ${first}: ${body}`, data: { sms: "demo, not sent", conversationId: cid || null } }
+    await elder(elderId).logEvent(ev).catch(() => {})
+    void archiveEvent(elderId, ev)
+    return "mock"
+  }
   const r = await sendSms(to, body)
   const ev = r.ok
     ? { kind: "note" as const, from: "system" as const, text: `Texted ${first} a recap of the call`, data: { sms: r.sid, conversationId: cid || null } }

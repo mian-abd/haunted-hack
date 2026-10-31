@@ -132,7 +132,7 @@ test("post-call transcription logs the recap and closes a call the agent left op
   const s = await state()
   expect(s.callState).toBe("idle")
   expect(s.timeline.map(e => e.text)).toContain("Call recap: Joe is dizzy and out of Amlodipine.")
-  expect(s.timeline.at(-1)).toMatchObject({ kind: "call_ended", text: "Joe is dizzy and out of Amlodipine." })
+  expect(s.timeline.findLast(e => e.kind === "call_ended")).toMatchObject({ text: "Joe is dizzy and out of Amlodipine." }) // the recap text may follow it
 })
 
 test("a call that never connects is closed with the reason", async () => {

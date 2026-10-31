@@ -53,14 +53,20 @@ test("the recap speaks to the elder when OpenAI is set, and says when Troska cal
   expect(text).toBe("Hi Joe, it's Troska. You told me you felt dizzy and ran out of your blood-pressure pills. Your refill is being readied. I'll call you again Saturday 4:30 PM. You can call this number anytime. - Troska")
 })
 
-test("one text per call, even when ElevenLabs retries the webhook; no Twilio setup means no text", async () => {
+test("one text per call, even when ElevenLabs retries the webhook", async () => {
   const d = { conversation_id: "conv_b" }
   expect(await textRecap(ID, d, "ok")).toBe("sent")
   expect(await textRecap(ID, d, "ok")).toBe("skipped")
   expect(twilio[0].form.get("To")).toBe("+15550000000") // no call metadata: ELDER_PHONE for the demo elder
+})
+
+test("without Twilio (the demo), the recap text is written and shown on the timeline, not sent", async () => {
   delete process.env.TWILIO_AUTH_TOKEN
-  expect(await textRecap(ID, { conversation_id: "conv_c" }, "ok")).toBe("skipped")
-  expect(twilio).toHaveLength(1)
+  expect(await textRecap(ID, { conversation_id: "conv_c" }, "Joe felt dizzy; a refill was requested.")).toBe("mock")
+  expect(twilio).toHaveLength(0)
+  const last = (await elder(ID).getState()).timeline.at(-1)
+  expect(last?.text).toStartWith("Text to Joe: Hi Joe, it's Troska. Here's a recap of our call: Joe felt dizzy")
+  expect(last?.data?.sms).toBe("demo, not sent")
 })
 
 test("a text Twilio refuses is logged on the timeline with Twilio's reason", async () => {
