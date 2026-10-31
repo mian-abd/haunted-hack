@@ -19,7 +19,7 @@ cp .env.example .env    # then set OPENAI_API_KEY in .env
 ./dev.sh                # starts actor :7100, server :8787, care-team :8788 and web :5173, prefixed logs, Ctrl-C stops all
 ```
 
-Open http://localhost:5173 when dev.sh prints the `[dev] ready` line. On a fresh clone, dev.sh runs `bun install` in `actor/` and `web/` first.
+Open http://localhost:5173/live (the demo dashboard; `/` is the landing page) when dev.sh prints the `[dev] ready` line. On a fresh clone, dev.sh runs `bun install` in `actor/` and `web/` first.
 
 Check the whole system end to end (real actor, real OpenAI brains, real Agent Relay traffic) while dev.sh runs:
 
@@ -48,7 +48,7 @@ Each line starts from the repo root. These were the results on the merged code (
 2. `cp .env.example .env` and set `OPENAI_API_KEY` (shared by DM, never in git).
 3. `./dev.sh`, then wait for `[dev] ready`.
 4. In a second terminal: `bun e2e.ts`. Every step should say PASS. Run it with `AUTO_DIAL` unset: e2e schedules a check-in, and with `AUTO_DIAL=1` that would ring the phone mid-test.
-5. Open http://localhost:5173, press **Reset demo**, then **Check-in in 15 s**, and answer in the browser. Say you're dizzy and ran out of your blood-pressure pills. The Care Feed should fill (doctor, pharmacy, family), the status should turn to watch, and a recheck should be scheduled.
+5. Open http://localhost:5173/live, open **Demo controls**, press **Reset demo**, then **Check-in in 15 s**, and answer in the browser. Say you're dizzy and ran out of your blood-pressure pills. The Care Feed should fill (doctor, pharmacy, family), the status should turn to watch, and a recheck should be scheduled.
 6. Durability flex: see "The durability flex" under Troubleshooting.
 
 **On Windows:** `dev.sh` is a bash script written for macOS (it uses `lsof` and process groups). Use Git Bash, or start the four services in four terminals: `cd actor && terse actor dev`, `cd server && bun run start`, `cd care-team && bun run start`, `cd web && bun run dev`. Started that way, each service reads only its own folder's `.env`, so copy `OPENAI_API_KEY` into `server/.env` and `care-team/.env`.
@@ -80,7 +80,7 @@ The ElevenLabs agent "Unc check-in" and our Twilio number ("HH") already exist i
    ```
 
 4. Restart `./dev.sh`, or just the server, so it reads the new `server/.env`.
-5. Open http://localhost:5173, press **Reset demo**, then **Check-in in 15 s**. When the countdown ends, the phone rings. Answer it as Grandpa: dizzy, out of the blood-pressure pill, and mix up the metformin timing on teach-back. The Care Feed fills while you talk. The timeline shows "Calling Joe's phone", then each med, symptom and teach-back event as it happens. After hang-up, the status turns to watch, and the recheck rings the phone again about 2 minutes later.
+5. Open http://localhost:5173/live, open **Demo controls**, press **Reset demo**, then **Check-in in 15 s**. When the countdown ends, the phone rings. Answer it as Grandpa: dizzy, out of the blood-pressure pill, and mix up the metformin timing on teach-back. The Care Feed fills while you talk. The timeline shows "Calling Joe's phone", then each med, symptom and teach-back event as it happens. After hang-up, the status turns to watch, and the recheck rings the phone again about 2 minutes later.
 6. To ring the phone right away, without the countdown:
 
    ```sh
@@ -133,7 +133,7 @@ The shared contract between the folders is [PLAN.md](PLAN.md).
 ## Troubleshooting
 
 - **A port is busy.** dev.sh stops if 7100, 8787, 8788 or 5173 is taken. Find the process with `lsof -iTCP:8787 -sTCP:LISTEN`. Web must stay on 5173, because the server only allows CORS from there.
-- **Voice fails or there is no key.** The call panel shows "Voice offline". Use **Run scripted demo**: it plays the same storyline with real tool calls, so the actor and the care team still react for real (labeled "scripted"). `http://localhost:5173/?mock=1` renders a fixture with no server at all. Add `?debug` to the URL to log every Realtime event in the browser console.
+- **Voice fails or there is no key.** The call panel shows "Voice offline". Use **Run scripted demo**: it plays the same storyline with real tool calls, so the actor and the care team still react for real (labeled "scripted"). `http://localhost:5173/live?mock=1` renders a fixture with no server at all. Add `?debug` to the URL to log every Realtime event in the browser console.
 - **Agent Relay.** With no `RELAY_WORKSPACE_KEY`, each care-team start creates a fresh anonymous 24-hour workspace, so the relay history starts empty after a restart (the actor timeline keeps it). Set `RELAY_WORKSPACE_KEY` to keep one workspace (see [care-team/README.md](care-team/README.md)). `RELAY_MODE=local` is an offline fallback that does not use Agent Relay. `curl localhost:8788/health` shows the relay mode, the model and how many OpenAI calls fell back to canned replies.
 - **The durability flex.** While dev.sh runs, stop only the actor with `pkill -INT -f "terse actor dev"` (server, care-team and web keep running), then start it again in a second terminal: `cd actor && ~/.bun/bin/terse actor dev`. The dashboard reconnects with a fresh grant, and the state and a pending check-in alarm survive. The local runtime re-arms the alarm when something wakes the actor (see [actor/README.md](actor/README.md)). An actor started that way is outside dev.sh, so stop it with Ctrl-C in its own terminal.
 - **Slow or odd agent messages.** Defaults are `OPENAI_MODEL=gpt-6-luna` and `OPENAI_REASONING_EFFORT=none`. `bun e2e.ts` prints the latency of every hop.
