@@ -33,7 +33,7 @@ Script (about 2 min):
 3. He says he is dizzy and ran out of his blood-pressure pills. On teach-back he gets his metformin timing wrong, and the agent gently corrects him.
 4. While he talks, the Care Feed fills in. Doctor lane: a triage packet. Pharmacy lane: "refill ready 5 pm". Family lane: "Dad is OK but dizzy…". The agent thread shows them coordinating.
 5. Status turns yellow. The actor schedules a recheck (countdown visible). When it fires, the phone rings again.
-6. Kill and restart the actor server: the state and the alarm are still there (the durability flex).
+6. The durability flex: stop our server on stage (Ctrl-C) and start it again. Grandpa's state, his timeline and the pending recheck live in his ElderActor in Terse cloud, not in our server, so the dashboard reconnects with everything still there, and the recheck still rings his phone when it comes due. (With a local `terse actor dev` instead of the cloud actor: kill and restart the actor itself.)
 
 ## Scope
 
