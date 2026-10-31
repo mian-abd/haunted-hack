@@ -5,6 +5,19 @@ Behind the call, doctor, pharmacy and family agents work the case with each othe
 
 Built at Haunted Hacks (Oct 31, 2026) with Terse Durable Actors, Agent Relay, ElevenLabs + Twilio (the phone call), OpenAI Realtime (the browser fallback) and Supabase. All people and medical data in this repo are fictional.
 
+## Pitch deck
+
+Six slides. Click a slide to see it full size, or [download the deck](docs/deck/Troska-Demo-Deck.pptx) (PowerPoint).
+
+<p>
+  <a href="docs/deck/slide-01.png"><img src="docs/deck/slide-01.png" width="49%" alt="Slide 1: Care that comes to you. A phone-first care team for older adults."></a>
+  <a href="docs/deck/slide-02.png"><img src="docs/deck/slide-02.png" width="49%" alt="Slide 2: The need. 1 in 5 Americans over 65 by 2030, 51M caregivers, 26 hours a week."></a>
+  <a href="docs/deck/slide-03.png"><img src="docs/deck/slide-03.png" width="49%" alt="Slide 3: The interface is a phone call."></a>
+  <a href="docs/deck/slide-04.png"><img src="docs/deck/slide-04.png" width="49%" alt="Slide 4: Live demo, a call with Grandpa Joe."></a>
+  <a href="docs/deck/slide-05.png"><img src="docs/deck/slide-05.png" width="49%" alt="Slide 5: The architecture, from the phone call to the care team."></a>
+  <a href="docs/deck/slide-06.png"><img src="docs/deck/slide-06.png" width="49%" alt="Slide 6: What we've verified in our tests."></a>
+</p>
+
 ## Troska at a glance
 
 **1. The whole system.** Grandpa talks on his own phone. Everything else happens behind the call.
