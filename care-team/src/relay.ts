@@ -35,7 +35,7 @@ export async function connectAgentRelay(): Promise<Relay> {
   let workspace = "(from RELAY_WORKSPACE_KEY)"
   if (!key) {
     // Anonymous bootstrap needs no login. shortcut: a fresh 24h workspace per boot; set RELAY_WORKSPACE_KEY to keep one.
-    workspace = `unc-care-${crypto.randomUUID().slice(0, 8)}`
+    workspace = `troska-care-${crypto.randomUUID().slice(0, 8)}`
     key = (await call(null, "POST", "/workspaces", { name: workspace, expires_in_seconds: 86_400 })).api_key as string
   }
   const tokens = {} as Record<Agent, string>
@@ -61,7 +61,7 @@ export async function connectAgentRelay(): Promise<Relay> {
     info: { baseUrl: BASE, workspace },
     async ensureChannel(name) {
       if (joined.has(name)) return
-      await call(tokens.caretaker, "POST", "/channels", { name, topic: "Unc care team" }).catch((e) => { if (e.status !== 409) throw e })
+      await call(tokens.caretaker, "POST", "/channels", { name, topic: "Troska care team" }).catch((e) => { if (e.status !== 409) throw e })
       for (const a of AGENTS) await call(tokens[a], "POST", `/channels/${name}/join`)
       joined.add(name)
     },

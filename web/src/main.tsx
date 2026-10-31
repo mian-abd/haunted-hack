@@ -26,7 +26,7 @@ function TopBar({ state, conn, now, children }: { state: ElderState; conn: Conn;
   return (
     <header className="top">
       <a className="brand" href="/">
-        <span className="logo">Unc</span>
+        <span className="logo">Troska</span>
         <span className="tagline">AI care team</span>
       </a>
       {p ? (
@@ -111,5 +111,5 @@ function App() {
 
 // No router library: "/live" is the demo dashboard, every other path the landing page (vercel.json rewrites all paths here).
 const live = location.pathname.replace(/\/+$/, "") === "/live"
-if (live) document.title = "Unc · Live demo"
+if (live) document.title = "Troska · Live demo"
 createRoot(document.getElementById("root")!).render(live ? <App /> : <Landing />)

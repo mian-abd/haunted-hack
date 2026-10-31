@@ -12,7 +12,7 @@ export type Heard = { id: string; kind: "med" | "symptom" | "refill" | "teach_ba
 const OFFLINE = "Voice offline — use Run scripted demo"
 const KIND_LABEL: Record<Heard["kind"], string> = { med: "Medication", symptom: "Symptom", refill: "Refill request", teach_back: "Teach-back", summary: "Summary" }
 
-/** One "What Unc heard" row per tool call: the facts the agent extracted, never the words. */
+/** One "What Troska heard" row per tool call: the facts the agent extracted, never the words. */
 export function heard(id: string, name: string, a: Args): Heard | null {
   const s = (v: unknown) => (v == null ? "" : String(v).trim())
   const note = s(a.note) || undefined
@@ -184,7 +184,7 @@ export function CallPanel({ state, call, now }: { state: ElderState; call: Call;
       <div className="stage">
         <div className="ring ring-wait"><PhoneIcon /></div>
         <p className="stage-title">On the phone with {first}</p>
-        <p className="muted">Unc is talking to {first} on his phone. What he says reaches the care team as the agent hears it.</p>
+        <p className="muted">Troska is talking to {first} on his phone. What he says reaches the care team as the agent hears it.</p>
       </div>
     )
   } else {
@@ -192,7 +192,7 @@ export function CallPanel({ state, call, now }: { state: ElderState; call: Call;
       <div className="stage">
         <p className="stage-title">{state.callState === "in_progress" ? "A check-in call is in progress" : `Ready when ${first} is`}</p>
         <p className="muted">
-          Unc calls to check meds, run a teach-back and hear how {first} feels.{call.phone ? ` This rings ${first}'s real phone.` : ""}
+          Troska calls to check meds, run a teach-back and hear how {first} feels.{call.phone ? ` This rings ${first}'s real phone.` : ""}
         </p>
         <button className="btn btn-primary" onClick={call.startVoiceCall}>{call.phone ? `Call ${first}'s phone` : "Start check-in"}</button>
       </div>
@@ -208,13 +208,13 @@ export function CallPanel({ state, call, now }: { state: ElderState; call: Call;
       {call.notice && <p className="notice" role="alert">{call.notice}</p>}
       {stage}
       {showHeard && (
-        <section className="heard" aria-label="What Unc heard">
+        <section className="heard" aria-label="What Troska heard">
           <div className="heard-head">
-            <h3 className="sub">{inCall ? "What Unc heard" : "Last call: what Unc heard"}</h3>
+            <h3 className="sub">{inCall ? "What Troska heard" : "Last call: what Troska heard"}</h3>
             <span className="muted">Summaries only, no transcript</span>
           </div>
           <ol ref={list} className="heard-list" aria-live="polite">
-            {call.heard.length === 0 && <li className="empty">Meds, symptoms and teach-back results appear here as Unc hears them</li>}
+            {call.heard.length === 0 && <li className="empty">Meds, symptoms and teach-back results appear here as Troska hears them</li>}
             {call.heard.map(h => (
               <li key={h.id} className={`heard-item heard-${h.kind} tone-${h.tone} enter`}>
                 <span className="heard-kind">{KIND_LABEL[h.kind]}</span>

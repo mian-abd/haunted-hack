@@ -15,7 +15,7 @@ export function storyline(s: ElderState): Step[] {
   // Meds before the symptom, so the doctor's case already carries the missed pill; the refill ask comes at the wrap-up,
   // after the doctor has had time to order it (one case per call then refills each med once).
   return [
-    { say: ["agent", `Hi ${first}, it's Unc with your afternoon check-in. Let's start with your medicines. Did you take your ${bp} this morning?`] },
+    { say: ["agent", `Hi ${first}, it's Troska with your afternoon check-in. Let's start with your medicines. Did you take your ${bp} this morning?`] },
     { say: ["elder", "No... I ran out of my blood pressure pills two days ago."] },
     { tool: ["confirm_medication", { med: bp, taken: false, note: "Ran out two days ago" }] },
     { say: ["agent", `Thank you for telling me. And did you take your ${tb} with breakfast?`] },

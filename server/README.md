@@ -1,4 +1,4 @@
-# server/ — Unc HTTP API (Bun, :8787)
+# server/ — Troska HTTP API (Bun, :8787)
 
 The backend that sits between the browser and everything else. It mints OpenAI Realtime keys for the voice call, runs
 the voice agent's tools against the `ElderActor`, sends escalations to the care team, and archives finished calls to
@@ -124,7 +124,7 @@ Columns follow `supabase/migrations/20261031120000_init.sql`. The archive is als
 
 ## Phone check-in (ElevenLabs + Twilio)
 
-The ElevenLabs agent "Unc check-in" talks to the elder on a real phone call from our Twilio number, and calls the
+The ElevenLabs agent "Troska check-in" talks to the elder on a real phone call from our Twilio number, and calls the
 same five voice tools as the browser call, as webhook tools on `/api/el/tool/*`. Code: `src/elevenlabs.ts`.
 
 1. Expose the server: `cloudflared tunnel --url http://localhost:8787` (or ngrok). Copy the `https://` URL.

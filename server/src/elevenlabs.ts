@@ -50,9 +50,9 @@ export const phoneCallEnded = (elderId: string) => { onPhone.delete(elderId) }
 // The agent's opening line ({{greeting}}): a scheduled check-in, a recheck the care team asked for, or the elder calling us.
 export function greeting(s: ElderState, inbound = false): string {
   const first = s.profile?.name.split(" ")[0] ?? "there"
-  if (inbound) return `Hi ${first}, it's Unc. Thanks for calling. What can I do for you?`
-  if (s.status !== "ok") return `Hi ${first}, it's Unc calling back to check on you. How are you feeling now?`
-  return `Hi ${first}, it's Unc calling for your check-in. How are you feeling today?`
+  if (inbound) return `Hi ${first}, it's Troska. Thanks for calling. What can I do for you?`
+  if (s.status !== "ok") return `Hi ${first}, it's Troska calling back to check on you. How are you feeling now?`
+  return `Hi ${first}, it's Troska calling for your check-in. How are you feeling today?`
 }
 
 // POST /api/call/dial: ElevenLabs places the call from our Twilio number, then the actor marks the call started.
@@ -118,7 +118,7 @@ async function inbound(req: Request, raw: string): Promise<Response> {
   const first = s.profile?.name.split(" ")[0] ?? "there"
   onPhone.set(elderId, Date.now())
   if (s.callState !== "in_progress") await actor.startCall()
-  await actor.logEvent({ kind: "note", from: "elder", text: `${first} called Unc`, data: { conversationId: b.conversation_id ?? null, inbound: true, knownNumber: known } })
+  await actor.logEvent({ kind: "note", from: "elder", text: `${first} called Troska`, data: { conversationId: b.conversation_id ?? null, inbound: true, knownNumber: known } })
   const context = [
     elderContext(s),
     `${first} called you this time. Ask what they need and help with that first, then do the check-in if there is time.`,

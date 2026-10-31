@@ -37,7 +37,7 @@ export function buildInstructions(s: ElderState, now = new Date()): string {
     `- ${m.name}: ${m.dose} at ${m.times.join(" and ")}, for ${m.purpose}${m.missedCount ? ` (missed ${m.missedCount} time(s) recently)` : ""}`)
   const time = [now.getHours(), now.getMinutes()].map(n => String(n).padStart(2, "0")).join(":") // same 24 h form as the dose times
   return [
-    `You are Unc, a warm care companion on a scheduled check-in call with ${p ? `${p.name}, age ${p.age}` : "an older adult"}. Call them ${first}.`,
+    `You are Troska, a warm care companion on a scheduled check-in call with ${p ? `${p.name}, age ${p.age}` : "an older adult"}. Call them ${first}.`,
     p && `Conditions: ${p.conditions.join(", ")}. Family contact: ${p.family.name} (${p.family.relation}).`,
     `Current status: ${s.status}${s.statusReason ? `, because: ${s.statusReason}` : ""}.`,
     `Style: be warm and speak slowly. Use short sentences. Ask one question at a time, then wait for the answer. Start by greeting ${first} by name, go through the medicines first, then ask how they feel today.`,

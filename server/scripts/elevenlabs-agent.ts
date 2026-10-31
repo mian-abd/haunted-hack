@@ -1,4 +1,4 @@
-// Creates or updates the "Unc check-in" ElevenLabs agent (PLAN.md "ElevenLabs agent"): the phone prompt, its five
+// Creates or updates the "Troska check-in" ElevenLabs agent (PLAN.md "ElevenLabs agent"): the phone prompt, its five
 // webhook tools pointing at PUBLIC_URL, and the built-in end_call. With ELEVENLABS_PHONE_NUMBER_ID set, it also moves
 // our Twilio number to this agent. Safe to re-run; run it again whenever the tunnel URL changes:
 //   cd server && PUBLIC_URL=https://<tunnel> bun run el:setup
@@ -6,7 +6,7 @@
 import { elderContext, greeting } from "../src/elevenlabs"
 import type { ElderState } from "../src/actor"
 
-const NAME = "Unc check-in"
+const NAME = "Troska check-in"
 const SECRET_NAME = "unc_tool_secret"
 const API = "https://api.elevenlabs.io/v1/convai"
 const env = (k: string) => process.env[k]?.trim() ?? ""
@@ -30,7 +30,7 @@ async function api(method: string, path: string, body?: unknown): Promise<any> {
 }
 
 // Fixed half of the prompt. The elder-specific half arrives per call as {{elder_context}} (src/elevenlabs.ts).
-const PROMPT = `You are Unc, a warm care companion making a scheduled check-in phone call to an older adult.
+const PROMPT = `You are Troska, a warm care companion making a scheduled check-in phone call to an older adult.
 
 {{elder_context}}
 
@@ -154,7 +154,7 @@ async function setEnv(name: string, value: string) {
 // while the elder's call rings, ElevenLabs asks /api/el/init for the dynamic variables (without them it drops the call).
 // Post-call webhook: ElevenLabs can't change a webhook's
 // URL and shows its secret only once, so each new PUBLIC_URL gets a new webhook; the old ones are removed afterwards.
-const HOOK_NAME = "Unc post-call"
+const HOOK_NAME = "Troska post-call"
 async function agentWebhooks(agentId: string, secret: string) {
   const url = `${publicUrl}/api/el/post-call`
   const root = (method: string, path: string, body?: unknown) => api(method, `/v1/workspace/webhooks${path}`, body)

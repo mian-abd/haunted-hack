@@ -1,4 +1,4 @@
-# care-team: the Unc care team on Agent Relay
+# care-team: the Troska care team on Agent Relay
 
 ## Contract deviations
 

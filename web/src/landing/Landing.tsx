@@ -9,7 +9,7 @@ const STATUS_LABEL = { ok: "OK", watch: "Watch", urgent: "Urgent" }
 const PILLARS = [
   ["The care team coordinates itself.", "Doctor, pharmacy and family agents message each other directly over Agent Relay. The case gets worked without the family relaying messages."],
   ["It never forgets.", "One durable actor per elder holds the meds, the history and the status. It schedules its own follow-up calls and survives restarts."],
-  ["Teach-back.", "Unc asks your parent to explain their medicines in their own words. It checks they understood, not just that they were reminded."],
+  ["Teach-back.", "Troska asks your parent to explain their medicines in their own words. It checks they understood, not just that they were reminded."],
 ]
 
 const STEPS = [
@@ -38,7 +38,7 @@ const STATS = [
 ]
 
 const SAFETY = [
-  ["Never diagnoses.", "Unc doesn't diagnose or change doses. The doctor agent triages; it never starts a new drug or tells anyone to double a missed dose."],
+  ["Never diagnoses.", "Troska doesn't diagnose or change doses. The doctor agent triages; it never starts a new drug or tells anyone to double a missed dose."],
   ["Escalates to humans.", "Danger signs like chest pain or fainting get one answer: call 911 now. When in doubt, the care team hands the case to people."],
   ["Summaries, not transcripts.", "Families see meds taken or missed, symptoms, teach-back results and a short summary. The call archive keeps the summary and mood, not the conversation."],
 ]
@@ -52,7 +52,7 @@ const BUILT_WITH = [
 
 const FAQ = [
   ["Is the demo really live?", "Yes. It runs a real voice call, real Agent Relay messages between the agents and a durable actor that holds the state. If voice or the network fails, a scripted mode replays the same story through the same screen and labels itself as scripted."],
-  ["Does Unc diagnose or change medicines?", "No. It never diagnoses and never changes doses. For danger signs it tells your parent to call 911, and the care team hands the case to people when in doubt."],
+  ["Does Troska diagnose or change medicines?", "No. It never diagnoses and never changes doses. For danger signs it tells your parent to call 911, and the care team hands the case to people when in doubt."],
   ["What does the family see?", "Summaries, not transcripts: meds taken or missed, symptoms, teach-back results, the care team's updates and a short note after each call."],
   ["Does it call a real phone?", "Not in this demo. The check-in call runs in the browser over OpenAI Realtime."],
   ["What happens if a server restarts mid-case?", "Nothing is lost. Each elder's actor is durable: its state and its next scheduled call survive restarts."],
@@ -89,14 +89,14 @@ export function Landing() {
   return (
     <div className="landing">
       <header className="site-head">
-        <a className="logo" href="/">Unc</a>
+        <a className="logo" href="/">Troska</a>
         <a className="nav-link" href="/live">Live demo</a>
       </header>
 
       <main>
         <section className="hero" aria-labelledby="hero-title">
           <h1 id="hero-title">No parent ages alone.</h1>
-          <p className="hero-sub">Unc is an AI care team for aging parents: a voice agent checks in, and doctor, pharmacy and family agents work the case together, live.</p>
+          <p className="hero-sub">Troska is an AI care team for aging parents: a voice agent checks in, and doctor, pharmacy and family agents work the case together, live.</p>
           <div className="actions">
             <a className="btn btn-primary" href="/live">Try the live demo</a>
             {VIDEO_URL && <a className="btn" href={VIDEO_URL} target="_blank" rel="noreferrer">Watch the demo video</a>}

@@ -1,4 +1,4 @@
-# Unc: an AI care team for aging parents
+# Troska: an AI care team for aging parents
 
 A voice agent makes check-in calls to an elder, on a real phone: it confirms medications, runs teach-back and notices when something is off.
 Behind the call, doctor, pharmacy and family agents work the case with each other over Agent Relay, and one durable actor per elder remembers everything and schedules the next call.
@@ -19,7 +19,7 @@ Built at Haunted Hacks (Oct 31, 2026) with Terse Durable Actors, Agent Relay, El
 |---|---|---|
 | `ElderActor` | **Terse cloud**, project `unc-actor` (org "unc"). Deployed with `cd actor && terse deploy` | `TERSE_ACTOR_URL=https://api.useterse.ai/cmvww8c4y013tjy2a0d2vx8x2/actors` and `TERSE_API_KEY` (app.useterse.ai → API keys) in `server/.env` and `care-team/.env`. With both set, no `terse actor dev` is needed, on any OS. |
 | Hospital records, call archive, care history | **Supabase** (the team project). Schema + seed applied with `supabase/apply.ts` | `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (the `sb_secret_` key) in `server/.env` and `care-team/.env` |
-| Phone voice | **ElevenLabs** agent "Unc check-in" on our Twilio number "HH" | `server/.env`: see "3. The phone call" |
+| Phone voice | **ElevenLabs** agent "Troska check-in" on our Twilio number "HH" | `server/.env`: see "3. The phone call" |
 | Care team | **Agent Relay** (Relaycast), anonymous 24 h workspace per start | `RELAY_WORKSPACE_KEY` to keep one workspace |
 | Agent brains, browser voice | **OpenAI** (`gpt-6-luna`, `gpt-realtime-2.1`) | `OPENAI_API_KEY` in `server/.env` and `care-team/.env` (or the root `.env` for dev.sh) |
 
@@ -70,7 +70,7 @@ Each line starts from the repo root. Every one should end with 0 fail or a clean
 
 ### 3. The phone call (ElevenLabs + Twilio)
 
-The ElevenLabs agent "Unc check-in" and our Twilio number ("HH") already exist in the team's ElevenLabs workspace. Whoever runs the demo machine does this setup once on that machine. Details: [server/README.md, Phone check-in](server/README.md#phone-check-in-elevenlabs--twilio).
+The ElevenLabs agent "Troska check-in" and our Twilio number ("HH") already exist in the team's ElevenLabs workspace. Whoever runs the demo machine does this setup once on that machine. Details: [server/README.md, Phone check-in](server/README.md#phone-check-in-elevenlabs--twilio).
 
 1. Put these in **`server/.env`** (git-ignored). Bun loads it both under dev.sh and for `el:setup`.
 
@@ -88,7 +88,7 @@ The ElevenLabs agent "Unc check-in" and our Twilio number ("HH") already exist i
    cloudflared tunnel --url http://localhost:8787
    ```
 
-3. Point the agent at this machine. This updates the agent's five webhook tools and the stored secret, and moves the HH number to "Unc check-in". It prints `ELEVENLABS_AGENT_ID`: add that to `server/.env`. Re-run it whenever the tunnel URL or `EL_TOOL_SECRET` changes.
+3. Point the agent at this machine. This updates the agent's five webhook tools and the stored secret, and moves the HH number to "Troska check-in". It prints `ELEVENLABS_AGENT_ID`: add that to `server/.env`. Re-run it whenever the tunnel URL or `EL_TOOL_SECRET` changes.
 
    ```sh
    cd server && PUBLIC_URL=https://<tunnel> bun run el:setup
@@ -102,7 +102,8 @@ The ElevenLabs agent "Unc check-in" and our Twilio number ("HH") already exist i
    curl -X POST localhost:8787/api/call/dial -H 'content-type: application/json' -d '{"elderId":"grandpa-joe"}'
    ```
 
-7. Optional, recommended: the post-call webhook. In the ElevenLabs dashboard, open the agent's settings, then Post-call webhook, and enter `https://<tunnel>/api/el/post-call`. Put its secret in `ELEVENLABS_WEBHOOK_SECRET` in `server/.env`. After each call, a "Call recap" note lands on the timeline, and a call where Grandpa hangs up early is closed properly.
+7. **Grandpa can call Troska too.** Call our Twilio number from `ELDER_PHONE`, and the agent answers "Hi Joe, it's Troska. Thanks for calling." with his details. `el:setup` turns on the inbound webhook (`/api/el/init`). Without that webhook, ElevenLabs drops inbound calls immediately ("Missing required dynamic variables").
+8. The post-call webhook is set up by `el:setup` too: it saves the secret in `server/.env`. After each call, a "Call recap" note lands on the timeline, the transcript goes to Supabase, and a call where Grandpa hangs up early is closed properly.
 
 **If the phone path breaks:**
 - **No ring.** Run the `curl` dial above and read the error:
@@ -124,7 +125,7 @@ The 2-minute script is in [PLAN.md, Demo](PLAN.md#demo-the-centerpiece-one-perso
 ## Architecture
 
 ```
-[Grandpa's phone] ⇄ Twilio ⇄ [ElevenLabs agent "Unc check-in"]      (fallback: browser mic ⇄ WebRTC ⇄ OpenAI Realtime → POST /api/tool)
+[Grandpa's phone] ⇄ Twilio ⇄ [ElevenLabs agent "Troska check-in"]      (fallback: browser mic ⇄ WebRTC ⇄ OpenAI Realtime → POST /api/tool)
                                      │ webhook tools        ▲ outbound-call API (AUTO_DIAL on call_due)
                                      ▼ (tunnel)             │
 web/ (Vite+React :5173) ──HTTP──▶ server/ (Bun :8787) ──Terse client──▶ actor/ ElderActor (:7100)

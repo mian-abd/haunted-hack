@@ -204,12 +204,12 @@ test("an inbound call: the elder's number gets his details and a thanks-for-call
   expect(res.status).toBe(200)
   const out = await res.json()
   expect(out.type).toBe("conversation_initiation_client_data")
-  expect(out.dynamic_variables).toMatchObject({ elder_id: ID, elder_first_name: "Joe", greeting: "Hi Joe, it's Unc. Thanks for calling. What can I do for you?" })
+  expect(out.dynamic_variables).toMatchObject({ elder_id: ID, elder_first_name: "Joe", greeting: "Hi Joe, it's Troska. Thanks for calling. What can I do for you?" })
   expect(out.dynamic_variables.elder_context).toContain("Joe called you this time")
   expect(out.dynamic_variables.elder_context).not.toContain("not on file")
   const s = await state()
   expect(s.callState).toBe("in_progress")
-  expect(s.timeline.at(-1)).toMatchObject({ kind: "note", text: "Joe called Unc" })
+  expect(s.timeline.at(-1)).toMatchObject({ kind: "note", text: "Joe called Troska" })
   expect((await post("/api/call/dial", { elderId: ID })).status).toBe(409) // he is on the phone: never ring him over it
 })
 
@@ -220,9 +220,9 @@ test("an inbound call from an unknown number asks the agent to confirm who is sp
 
 test("the greeting fits the call: check-in, recheck or the elder calling", async () => {
   const { greeting } = await import("./elevenlabs")
-  expect(greeting(await state())).toBe("Hi Joe, it's Unc calling for your check-in. How are you feeling today?")
+  expect(greeting(await state())).toBe("Hi Joe, it's Troska calling for your check-in. How are you feeling today?")
   await elder(ID).setStatus("watch", "dizzy")
-  expect(greeting(await state())).toBe("Hi Joe, it's Unc calling back to check on you. How are you feeling now?")
+  expect(greeting(await state())).toBe("Hi Joe, it's Troska calling back to check on you. How are you feeling now?")
   const dial = await post("/api/call/dial", { elderId: ID })
   expect(dial.status).toBe(200)
   expect(JSON.parse(String(outbound()[0].init.body)).conversation_initiation_client_data.dynamic_variables.greeting).toContain("calling back")
