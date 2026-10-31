@@ -3,7 +3,8 @@
 // webhooks and its post-call webhook, and (AUTO_DIAL=1) dials whenever the actor's alarm makes a call due.
 import { createHmac, timingSafeEqual } from "node:crypto"
 import { elder, type ElderState } from "./actor"
-import { archiveTranscript, historyFor, linkPhone, newCallerProfile, patientById, patientByPhone, recordFor, samePhone } from "./store"
+import { recapText, sendSms, smsReady } from "./sms"
+import { archiveEvent, archiveTranscript, historyFor, linkPhone, newCallerProfile, patientById, patientByPhone, recordFor, samePhone } from "./store"
 
 type Body = Record<string, any>
 export type Deps = {
@@ -186,8 +187,36 @@ async function postCall(req: Request, raw: string, deps: Deps): Promise<Response
     await actor.logEvent({ kind: "note", from: "system", text: summary, data: { conversationId: d.conversation_id ?? null } })
   }
   if (summary && (await actor.getState()).callState === "in_progress") await deps.endCall(elderId, summary)
-  if (ev.type === "post_call_transcription") await archiveTranscript(elderId, summary!, Array.isArray(d.transcript) ? d.transcript : [], d.conversation_id ?? null)
+  if (ev.type === "post_call_transcription") {
+    await archiveTranscript(elderId, summary!, Array.isArray(d.transcript) ? d.transcript : [], d.conversation_id ?? null)
+    void textRecap(elderId, d, summary!) // in the background: the webhook answers ElevenLabs right away
+  }
   return Response.json({ ok: true })
+}
+
+// After every phone call, a text to the person Troska talked with (sms.ts). The number is the call's own (ElevenLabs
+// metadata), else the profile's, else ELDER_PHONE. Once per conversation, even if ElevenLabs retries the webhook.
+const texted = new Set<string>()
+export async function textRecap(elderId: string, d: Body, summary: string): Promise<"sent" | "skipped" | "failed"> {
+  if (!smsReady()) return "skipped"
+  const cid = d.conversation_id ? String(d.conversation_id) : ""
+  if (cid && texted.has(cid)) return "skipped"
+  if (cid) texted.add(cid)
+  const row = await patientById(elderId)
+  const to = d.metadata?.phone_call?.external_number || row?.phone || (elderId === defaultElder() ? env("ELDER_PHONE") : "")
+  if (!to) return "skipped"
+  const s = await elder(elderId).getState()
+  const name = s.profile?.name ?? (row?.name !== "New caller" ? row?.name : undefined)
+  const first = name?.split(" ")[0] ?? "there"
+  const body = await recapText(first, summary, s.nextCheckInAt)
+  const r = await sendSms(to, body)
+  const ev = r.ok
+    ? { kind: "note" as const, from: "system" as const, text: `Texted ${first} a recap of the call`, data: { sms: r.sid, conversationId: cid || null } }
+    : { kind: "note" as const, from: "system" as const, text: `The recap text to ${first} was not sent: ${r.error}`, data: { conversationId: cid || null } }
+  await elder(elderId).logEvent(ev).catch(() => {})
+  void archiveEvent(elderId, ev)
+  if (!r.ok) console.warn(`[sms] ${elderId}: ${r.error}`)
+  return r.ok ? "sent" : "failed"
 }
 
 // AUTO_DIAL=1: dial whenever the actor says a call is due (its alarm fired). Polling, like web/'s fallback, keeps

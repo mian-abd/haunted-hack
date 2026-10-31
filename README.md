@@ -185,6 +185,10 @@ The ElevenLabs agent "Troska check-in" and our Twilio number ("HH") already exis
    - A known caller hears their own history: the last 3 calls and recent symptoms, read from Supabase.
    - Apply the phone column once with `bun supabase/apply.ts` (it runs every migration).
 8. The post-call webhook is set up by `el:setup` too: it saves the secret in `server/.env`. After each call, a "Call recap" note lands on the timeline, the transcript goes to Supabase, and a call where Grandpa hangs up early is closed properly.
+9. **A recap text after every call.** The person on the call gets a text from our Troska number: two warm sentences on what Troska heard, plus when it will call next. OpenAI rewrites the call summary for them; without a key, a plain template is used.
+   - **Setup:** set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_FROM` (our Twilio number) for the server.
+   - **What the timeline shows:** "Texted Joe a recap of the call", or Twilio's reason if the text was refused.
+   - **Carrier rules:** US carriers block texts from unregistered long-code numbers (Twilio error 30034, which needs A2P 10DLC registration), and a trial account can text only verified numbers.
 
 **If the phone path breaks:**
 - **No ring.** Run the `curl` dial above and read the error:
