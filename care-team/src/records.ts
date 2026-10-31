@@ -9,13 +9,18 @@ export type HospitalRecord = { patient: Patient | null; prescriptions: Prescript
 
 const SEED = new URL("../../supabase/seed.json", import.meta.url)
 
+// PostgREST auth. A legacy service_role key is a JWT: apikey + Authorization: Bearer. A new sb_secret_ key is not a JWT,
+// and Supabase rejects it as a Bearer token ("API keys" docs, Known limitations): apikey only.
+export const supabaseAuth = (key: string): Record<string, string> =>
+  key.split(".").length === 3 ? { apikey: key, Authorization: `Bearer ${key}` } : { apikey: key }
+
 export async function loadRecord(elderId: string): Promise<HospitalRecord> {
   const url = process.env.SUPABASE_URL?.replace(/\/+$/, "")
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (url && key) {
     try {
       const get = async (query: string) => {
-        const res = await fetch(`${url}/rest/v1/${query}`, { headers: { apikey: key, authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(8_000) })
+        const res = await fetch(`${url}/rest/v1/${query}`, { headers: supabaseAuth(key), signal: AbortSignal.timeout(8_000) })
         if (!res.ok) throw new Error(`${res.status} on ${query.split("?")[0]}`)
         return res.json()
       }

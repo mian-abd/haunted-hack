@@ -4,7 +4,7 @@
 import type { Agent, Relay } from "./relay"
 import type { ActorBridge } from "./actor"
 import { loadRecord } from "./records"
-import { caseNote, triage, refillNote, familyText, type Urgency } from "./brain"
+import { bare, caseNote, clip, triage, refillNote, familyText, type Urgency } from "./brain"
 
 export const KINDS = ["symptom", "refill", "vitals", "summary", "teach_back"] as const
 export type Escalation = { elderId: string; kind: (typeof KINDS)[number]; reason: string; details?: Record<string, unknown> }
@@ -29,6 +29,8 @@ export function invalid(b: any): string | null {
 export function startCareTeam(relay: Relay, actor: ActorBridge, records = loadRecord) {
   // Sends over the relay, then mirrors that message to the actor timeline. A failed mirror never blocks the case.
   async function send(from: Agent, to: string, lane: Lane, text: string, data: Record<string, any>, dmTo?: Agent) {
+    if (text.length > 240) console.warn(`[care-team] ${from}: clipped a ${text.length}-char message for the Care Feed`)
+    text = clip(text)
     const channel = channelFor(data.elderId)
     const msg = dmTo ? await relay.dm(from, dmTo, text, data) : await relay.post(from, channel, text, data)
     console.log(`[relay] ${msg.id} ${msg.ts} ${from} -> ${dmTo ? `@${dmTo}` : `#${channel}`}: ${text}`)
@@ -86,9 +88,10 @@ export function startCareTeam(relay: Relay, actor: ActorBridge, records = loadRe
     if (k && RANK[k.urgency] > RANK[d.urgency]) d.urgency = k.urgency // within a case, urgency never goes down
     if (k) k.urgency = d.urgency
     const name = record.patient?.name ?? elderId
-    await send("doctor", "caretaker", "doctor", d.text, { type: "decision", caseId, elderId, urgency: d.urgency, reason: d.reason, actions: d.actions, recheck: d.recheck })
+    await send("doctor", "caretaker", "doctor", d.text, { type: "decision", caseId, elderId, urgency: d.urgency, reason: d.reason, actions: d.actions, recheck: d.recheck, refillMed: d.refillMed, notifyFamily: d.notifyFamily })
     if (d.refillMed && firstRefill(k, d.refillMed)) await send("doctor", "pharmacy", "pharmacy", `Please refill ${d.refillMed} for ${name} today.`, { type: "refill_request", caseId, elderId, med: d.refillMed }, "pharmacy")
-    if (d.notifyFamily) await send("doctor", "family", "family", `Please update ${name}'s family. Status: ${d.urgency.toUpperCase()}. ${d.reason}. Plan: ${d.actions.join("; ")}.`, { type: "notify_family", caseId, elderId, urgency: d.urgency, reason: d.reason, actions: d.actions }, "family")
+    const plan = d.actions.length ? ` Plan: ${d.actions.map(bare).join("; ")}.` : ""
+    if (d.notifyFamily) await send("doctor", "family", "family", `Please update ${record.patient?.family_name ?? `${name}'s family`}: ${name} is on ${d.urgency.toUpperCase()}. ${bare(d.reason)}.${plan}`, { type: "notify_family", caseId, elderId, urgency: d.urgency, reason: d.reason, actions: d.actions }, "family")
   })
 
   relay.listen("caretaker", async (m) => {

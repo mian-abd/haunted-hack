@@ -2,7 +2,7 @@
 import { connectAgentRelay, localRelay } from "./relay"
 import { createActorBridge } from "./actor"
 import { startCareTeam, invalid } from "./flow"
-import { brainMode, MODEL } from "./brain"
+import { brainMode, MODEL, stats } from "./brain"
 
 const relay = process.env.RELAY_MODE === "local" ? localRelay() : await connectAgentRelay().catch((e) => {
   console.error(`[care-team] cannot reach Agent Relay (${e.message}). Offline? RELAY_MODE=local starts the LOCAL FALLBACK bus.`)
@@ -17,7 +17,7 @@ const server = Bun.serve({
   async fetch(req) {
     const { pathname } = new URL(req.url)
     if (req.method === "GET" && pathname === "/health")
-      return Response.json({ ok: true, relay: relay.mode, ...relay.info, actor: actor.mode, brain: brainMode(), model: MODEL })
+      return Response.json({ ok: true, relay: relay.mode, ...relay.info, actor: actor.mode, brain: brainMode(), model: MODEL, fallbacks: stats.fallbacks })
     if (req.method === "POST" && pathname === "/escalate") {
       const body = await req.json().catch(() => null)
       const error = invalid(body)

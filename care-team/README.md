@@ -21,12 +21,13 @@ There are four Agent Relay identities: `caretaker`, `doctor`, `pharmacy` and `fa
 | 5 | pharmacy → doctor | `#care-<elderId>` | pharmacy | `refill_ready` ("Refill for Amlodipine 5 mg ready at 5 PM at the corner pharmacy.") |
 | 6 | family → family-contact | `#care-<elderId>` | family | `family_message` (a warm text to the daughter) |
 
+- **The caretaker routes, the others think.** The caretaker's handoff is a fixed sentence (`caseNote` in `src/brain.ts`), with no LLM call: it is instant and always addressed to the right teammate. The doctor, pharmacy and family replies come from the LLM, with length limits in their prompts, and every relay message is capped at 240 characters for the Care Feed.
 - **Status and recheck.** When the caretaker receives the doctor's `decision`, it calls `setStatus(urgency, reason)`. If the doctor asked for a recheck, it also calls `scheduleCheckIn(now + RECHECK_SECONDS)`, or `URGENT_RECHECK_SECONDS` for an urgent case.
 - **Safety floor.** Danger signs are always `urgent`: chest pain, trouble breathing, fainting or passing out, a fall, slurred speech, severity `high`, or heart rate ≥130 or ≤40. The LLM can raise urgency but never lower it below that. An urgent decision says to call 911 if needed, pages the human clinician, and tells the family to call him or go to him now.
 - **One case per call.** Escalations for the same elder within `CASE_WINDOW_MS` (3 min) join the open case and reuse its `caseId`, so one call is one thread. Within a case, urgency never goes down, and each medication is refilled once: a direct `refill` and the doctor's `refill_request` for the same med (matched on the first word) produce one `refill_ready`.
 - **Mirroring.** Every message is sent first, then mirrored to the actor with `logEvent({ kind: "agent_msg", from, to, text, data: { lane, ... } })`. These events are the live Care Feed.
 - **Routing by `kind`.** `symptom` and `vitals` go to the doctor, so the full flow above runs. `refill` goes straight to the pharmacy. `summary` and `teach_back` go to the family agent.
-- **The doctor's record.** The doctor reads the hospital record from Supabase (`patients`, `prescriptions` and `clinical_notes` through PostgREST). If Supabase is not configured, it reads `../supabase/seed.json`.
+- **The doctor's record.** The doctor reads the hospital record from Supabase (`patients`, `prescriptions` and `clinical_notes` through PostgREST). If Supabase is not configured, it reads `../supabase/seed.json`. PostgREST gets `apikey`, plus `Authorization: Bearer` only for a legacy JWT key; a new `sb_secret_...` key is not a JWT and Supabase rejects it as a Bearer token (`supabaseAuth` in `src/records.ts`, unit-tested).
 
 ## Run it
 
@@ -60,7 +61,8 @@ There are no npm dependencies. The service needs Bun 1.4+.
 |---|---|---|
 | `PORT` | `8788` | HTTP port |
 | `OPENAI_API_KEY` | empty = **MOCK** | Agent brains (Chat Completions). Without a key, agents give canned replies that play the PLAN.md storyline. If an OpenAI call fails, that reply falls back to the mock. |
-| `OPENAI_MODEL` | `gpt-6-luna` | OpenAI's fast, cheap model as of Oct 2026 ($0.10 / $0.50 per MTok). Requests use `reasoning_effort: "low"`. |
+| `OPENAI_MODEL` | `gpt-6-luna` | Chosen by measurement on Oct 31 (see "Measured with the real key" below). |
+| `OPENAI_REASONING_EFFORT` | `none` | Fastest on gpt-6-luna with the same output. Some models (gpt-6.1-sol) reject `none`: use `low`. A rejected call falls back to the mock reply and counts in `/health` `fallbacks`. |
 | `RELAY_BASE_URL` | `https://armadillo.agentrelay.com` | Agent Relay (Relaycast) engine |
 | `RELAY_WORKSPACE_KEY` | empty | Empty means each start creates a fresh 24-hour workspace anonymously, with no login. Set an `ar_ws_...` key to keep one workspace across restarts. |
 | `RELAY_MODE` | empty | `local` turns on the **LOCAL FALLBACK**: an in-process bus for offline testing. That traffic is not Agent Relay, and `/health` shows `"relay":"local"`. |
@@ -88,10 +90,23 @@ With the key set, you can show the raw Agent Relay thread:
 
 ## What is mocked
 
-- **Brains.** Mock mode is used whenever `OPENAI_API_KEY` is empty, which is the case in this environment. The mock doctor returns the storyline decision (`watch`, refill Amlodipine, recheck in 2h, notify family, do not double the dose) unless the case has a danger sign, which gets a canned `urgent` decision instead. The mock family text is written for Grandpa Joe texting his daughter.
+- **Brains.** Mock mode is used whenever `OPENAI_API_KEY` is empty. The mock doctor returns the storyline decision (`watch`, refill Amlodipine, recheck in 2h, notify family, do not double the dose) unless the case has a danger sign, which gets a canned `urgent` decision instead. The mock family text is written for Grandpa Joe texting his daughter.
 - **Actor.** The in-memory fake is used only with `TERSE_FAKE=1` or when `generated/` is missing.
 - **Relay.** The local bus is used only with `RELAY_MODE=local`, and is labeled in logs and `/health`. The real Agent Relay path is the default.
 - **SMS.** There is no Twilio send. The family text shows up in the Family lane only (PLAN.md marks SMS as a stretch).
+
+## Measured with the real key (Oct 31)
+
+`bun e2e.ts` from the repo root, against the running stack (real OpenAI, real Agent Relay, real actor), scripted-demo tool sequence:
+
+| hop | gpt-6-luna, effort low, LLM caretaker (before) | gpt-6-luna, effort none, template caretaker (now) |
+|---|---|---|
+| report_symptom → doctor decision | 8.2 s | 3.2 s |
+| report_symptom → family message | 14.9 s | 5.6 s |
+| request_refill → pharmacy refill ready | 4.0 s | 2.0 s |
+| longest relay message | 504 chars | 218 chars |
+
+Model check, 3 calls each with the shipped prompts (median doctor triage / family text): gpt-6-luna effort low 2.5 s / 1.1 s, effort none 1.7 s / 1.0 s; gpt-5.4-mini effort none 0.9 s / 0.7 s, but in one run it ordered a refill the case never mentioned (a duplicate pharmacy refill in the demo), and with the old prompts it invented care steps ("checking his blood sugar"). gpt-6-sol and gpt-6.1-sol were slower at similar quality. So gpt-6-luna stays the default.
 
 ## Known gaps
 

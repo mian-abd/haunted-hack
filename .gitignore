@@ -8,3 +8,6 @@ build/
 *.log
 supabase/.temp/
 supabase/.branches/
+.impeccable/mocks/
+.impeccable/review/
+.impeccable/build/

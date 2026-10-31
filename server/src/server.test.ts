@@ -3,7 +3,7 @@ import { afterAll, beforeEach, expect, test } from "bun:test"
 // Fake actor + stubbed fetch. Env must be set before the modules load.
 process.env.TERSE_FAKE = "1"
 process.env.CARE_TEAM_URL = "http://care.test"
-const { handle } = await import("./server")
+const { handle, supabaseAuth } = await import("./server")
 const { elder } = await import("./actor")
 
 const ID = "grandpa-joe"
@@ -72,15 +72,15 @@ test("report_symptom: low logs only, medium/high also escalates", async () => {
   expect(escalations()).toEqual([{ elderId: ID, kind: "symptom", reason: "dizzy when standing", details: { severity: "medium" } }])
 })
 
-test("teach_back_result: not understood adds a family-lane note and escalates", async () => {
+test("teach_back_result: not understood escalates once; the family lane is left to the care team", async () => {
   expect((await tool("teach_back_result", { med: "Metformin", understood: true })).output).toBe("Logged: teach-back for Metformin understood.")
   expect(escalations()).toEqual([])
 
   const r = await tool("teach_back_result", { med: "Metformin", understood: false, note: "thought it was at bedtime" })
   expect(r.output).toBe("Logged: teach-back for Metformin not understood. Family notified.")
-  const [tb, note] = (await state()).timeline.slice(-2)
-  expect(tb).toMatchObject({ kind: "teach_back", data: { med: "Metformin", understood: false } })
-  expect(note).toMatchObject({ kind: "note", to: "family", data: { lane: "family" } })
+  const s = await state()
+  expect(s.timeline.at(-1)).toMatchObject({ kind: "teach_back", data: { med: "Metformin", understood: false } })
+  expect(s.timeline.filter(e => e.data?.lane)).toEqual([]) // no server-written lane item: it would duplicate the relay's family message
   expect(escalations()).toMatchObject([{ elderId: ID, kind: "teach_back", details: { med: "Metformin" } }])
 })
 
@@ -101,13 +101,26 @@ test("end_call -> endCall + summary escalation; Supabase skipped without env", a
   expect(calls.filter(c => c.url.includes("/rest/v1/"))).toEqual([])
 })
 
+const LEGACY_JWT = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.c2ln" // shape of a legacy service_role key
 test("end_call archives to Supabase calls + care_events when both env vars are set", async () => {
   process.env.SUPABASE_URL = "https://db.test"
-  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key"
+  process.env.SUPABASE_SERVICE_ROLE_KEY = LEGACY_JWT
   await tool("end_call", { summary: "All good.", mood: "cheerful" })
   const db = calls.filter(c => c.url.startsWith("https://db.test/rest/v1/"))
   expect(db.map(c => c.url)).toEqual(["https://db.test/rest/v1/calls", "https://db.test/rest/v1/care_events"])
-  for (const c of db) expect(c.init.headers).toMatchObject({ apikey: "test-service-key", Authorization: "Bearer test-service-key" })
+  for (const c of db) expect(c.init.headers).toMatchObject({ apikey: LEGACY_JWT, Authorization: `Bearer ${LEGACY_JWT}` })
+})
+
+test("Supabase auth headers: legacy JWT key gets apikey + Bearer, sb_secret_ key gets apikey only", async () => {
+  expect(supabaseAuth(LEGACY_JWT)).toEqual({ apikey: LEGACY_JWT, Authorization: `Bearer ${LEGACY_JWT}` })
+  expect(supabaseAuth("sb_secret_abc123")).toEqual({ apikey: "sb_secret_abc123" }) // Supabase rejects a non-JWT Bearer token
+
+  process.env.SUPABASE_URL = "https://db.test"
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "sb_secret_abc123"
+  await tool("end_call", { summary: "All good.", mood: "cheerful" })
+  const db = calls.filter(c => c.url.startsWith("https://db.test/rest/v1/"))
+  expect(db.length).toBe(2)
+  for (const c of db) expect(Object.keys(c.init.headers as object)).not.toContain("Authorization")
 })
 
 test("a dead care team does not break the tool call", async () => {
