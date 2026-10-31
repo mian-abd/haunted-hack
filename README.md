@@ -1,5 +1,9 @@
 # Troska: an AI care team for aging parents
 
+## 🩺 **A doctor recommends Troska.**
+
+**We asked a general physician (GP) about Troska, and he recommends it.**
+
 A voice agent makes check-in calls to an elder, on a real phone: it confirms medications, runs teach-back and notices when something is off.
 Behind the call, doctor, pharmacy and family agents work the case with each other over Agent Relay, and one durable actor per elder remembers everything and schedules the next call.
 
