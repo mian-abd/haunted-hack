@@ -3,7 +3,7 @@
 // our Twilio number to this agent. Safe to re-run; run it again whenever the tunnel URL changes:
 //   cd server && PUBLIC_URL=https://<tunnel> bun run el:setup
 // Needs ELEVENLABS_API_KEY and EL_TOOL_SECRET (server/.env or the shell). Prints the agent id for server/.env.
-import { elderContext } from "../src/elevenlabs"
+import { elderContext, greeting } from "../src/elevenlabs"
 import type { ElderState } from "../src/actor"
 
 const NAME = "Unc check-in"
@@ -107,13 +107,13 @@ async function placeholders(): Promise<Record<string, string>> {
       .map((r: any) => ({ name: r.name, dose: r.dose, times: r.times, purpose: r.purpose, lastTakenAt: null, missedCount: 0 })),
     status: "ok", statusReason: "", callState: "idle", nextCheckInAt: null, timeline: [],
   }
-  return { elder_id: p.id, elder_first_name: p.name.split(" ")[0], elder_context: elderContext(state) }
+  return { elder_id: p.id, elder_first_name: p.name.split(" ")[0], elder_context: elderContext(state), greeting: greeting(state) }
 }
 
 async function upsertAgent(toolIds: string[]): Promise<string> {
   const conversation_config = {
     agent: {
-      first_message: "Hi {{elder_first_name}}, it's Unc calling for your check-in. How are you feeling today?",
+      first_message: "{{greeting}}", // set per call by the server: a check-in, a recheck, or the elder calling us
       language: "en",
       dynamic_variables: { dynamic_variable_placeholders: await placeholders() },
       prompt: {
@@ -150,10 +150,12 @@ async function setEnv(name: string, value: string) {
   await Bun.write(ENV_FILE, [...lines, `${name}=${value}`].join("\n") + "\n")
 }
 
-// Post-call webhook (transcript + calls that never connected) → /api/el/post-call. ElevenLabs can't change a webhook's
+// Two webhooks on the agent. Post-call (transcript + calls that never connected) → /api/el/post-call. Inbound calls:
+// while the elder's call rings, ElevenLabs asks /api/el/init for the dynamic variables (without them it drops the call).
+// Post-call webhook: ElevenLabs can't change a webhook's
 // URL and shows its secret only once, so each new PUBLIC_URL gets a new webhook; the old ones are removed afterwards.
 const HOOK_NAME = "Unc post-call"
-async function postCallWebhook(agentId: string) {
+async function agentWebhooks(agentId: string, secret: string) {
   const url = `${publicUrl}/api/el/post-call`
   const root = (method: string, path: string, body?: unknown) => api(method, `/v1/workspace/webhooks${path}`, body)
   const { webhooks = [] } = await root("GET", "")
@@ -168,14 +170,22 @@ async function postCallWebhook(agentId: string) {
     console.log(`created post-call webhook -> ${url} (secret saved to server/.env)`)
   }
   await api("PATCH", `/agents/${agentId}`, {
-    platform_settings: { workspace_overrides: { webhooks: { post_call_webhook_id: id, events: ["transcript", "call_initiation_failure"] } } },
+    platform_settings: {
+      overrides: { enable_conversation_initiation_client_data_from_webhook: true },
+      workspace_overrides: {
+        webhooks: { post_call_webhook_id: id, events: ["transcript", "call_initiation_failure"] },
+        conversation_initiation_client_data_webhook: { url: `${publicUrl}/api/el/init`, request_headers: { "x-unc-secret": { secret_id: secret } } },
+      },
+    },
   })
+  console.log(`inbound calls ask ${publicUrl}/api/el/init who is calling`)
   for (const w of ours) if (w.webhook_id !== id) await root("DELETE", `/${w.webhook_id}`).catch(e => console.warn(`could not delete old webhook: ${e.message}`))
 }
 
-const agentId = await upsertAgent(await upsertTools(await secretId()))
+const secret = await secretId()
+const agentId = await upsertAgent(await upsertTools(secret))
 await setEnv("ELEVENLABS_AGENT_ID", agentId)
-await postCallWebhook(agentId)
+await agentWebhooks(agentId, secret)
 const phone = env("ELEVENLABS_PHONE_NUMBER_ID")
 if (phone) {
   await api("PATCH", `/phone-numbers/${phone}`, { agent_id: agentId })

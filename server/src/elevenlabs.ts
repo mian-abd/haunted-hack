@@ -47,6 +47,14 @@ const dialing = new Set<string>()
 const onPhone = new Map<string, number>()
 export const phoneCallEnded = (elderId: string) => { onPhone.delete(elderId) }
 
+// The agent's opening line ({{greeting}}): a scheduled check-in, a recheck the care team asked for, or the elder calling us.
+export function greeting(s: ElderState, inbound = false): string {
+  const first = s.profile?.name.split(" ")[0] ?? "there"
+  if (inbound) return `Hi ${first}, it's Unc. Thanks for calling. What can I do for you?`
+  if (s.status !== "ok") return `Hi ${first}, it's Unc calling back to check on you. How are you feeling now?`
+  return `Hi ${first}, it's Unc calling for your check-in. How are you feeling today?`
+}
+
 // POST /api/call/dial: ElevenLabs places the call from our Twilio number, then the actor marks the call started.
 export async function dial(elderId: string): Promise<{ conversationId: string | null; callSid: string | null }> {
   const [key, agent, phone, to] = ["ELEVENLABS_API_KEY", "ELEVENLABS_AGENT_ID", "ELEVENLABS_PHONE_NUMBER_ID", "ELDER_PHONE"].map(env)
@@ -66,7 +74,7 @@ export async function dial(elderId: string): Promise<{ conversationId: string | 
         agent_id: agent,
         agent_phone_number_id: phone,
         to_number: to,
-        conversation_initiation_client_data: { dynamic_variables: { elder_id: elderId, elder_first_name: first, elder_context: elderContext(s) } },
+        conversation_initiation_client_data: { dynamic_variables: { elder_id: elderId, elder_first_name: first, elder_context: elderContext(s), greeting: greeting(s) } },
       }),
       signal: AbortSignal.timeout(15_000),
     })
@@ -86,6 +94,7 @@ export async function webhook(req: Request, pathname: string, deps: Deps): Promi
   if (req.method !== "POST") fail("not found", 404)
   const raw = await req.text()
   if (pathname === "/api/el/post-call") return postCall(req, raw, deps)
+  if (pathname === "/api/el/init") return inbound(req, raw)
   const name = pathname.match(/^\/api\/el\/tool\/([a-z_]+)$/)?.[1] ?? fail("not found", 404)
   sameSecret(req.headers.get("x-unc-secret"), env("EL_TOOL_SECRET"), "EL_TOOL_SECRET")
   let args: Body
@@ -93,6 +102,32 @@ export async function webhook(req: Request, pathname: string, deps: Deps): Promi
   const { elder_id, ...rest } = args // the agent fills elder_id from the {{elder_id}} dynamic variable
   const elderId = typeof elder_id === "string" && elder_id.trim() ? elder_id : defaultElder()
   return Response.json({ output: await deps.runTool(elderId, name, rest) })
+}
+
+// POST /api/el/init: the elder calls our Twilio number. ElevenLabs asks here, while the phone rings, who is calling;
+// without the agent's dynamic variables it drops the call ("Missing required dynamic variables"). The caller's number
+// picks the elder (ELDER_PHONE); an unknown number still gets the demo elder, and the agent confirms who it is talking to.
+async function inbound(req: Request, raw: string): Promise<Response> {
+  sameSecret(req.headers.get("x-unc-secret"), env("EL_TOOL_SECRET"), "EL_TOOL_SECRET")
+  let b: Body
+  try { b = raw ? JSON.parse(raw) : {} } catch { return fail("body must be JSON") }
+  const known = !!env("ELDER_PHONE") && String(b.caller_id ?? "").replace(/[^\d+]/g, "") === env("ELDER_PHONE").replace(/[^\d+]/g, "")
+  const elderId = defaultElder()
+  const actor = elder(elderId)
+  const s = await actor.getState()
+  const first = s.profile?.name.split(" ")[0] ?? "there"
+  onPhone.set(elderId, Date.now())
+  if (s.callState !== "in_progress") await actor.startCall()
+  await actor.logEvent({ kind: "note", from: "elder", text: `${first} called Unc`, data: { conversationId: b.conversation_id ?? null, inbound: true, knownNumber: known } })
+  const context = [
+    elderContext(s),
+    `${first} called you this time. Ask what they need and help with that first, then do the check-in if there is time.`,
+    !known && `The call came from a number that is not on file for ${first}. Confirm you are speaking with ${first} before you discuss anything personal.`,
+  ].filter(Boolean).join("\n")
+  return Response.json({
+    type: "conversation_initiation_client_data",
+    dynamic_variables: { elder_id: elderId, elder_first_name: first, elder_context: context, greeting: greeting(s, true) },
+  })
 }
 
 function sameSecret(got: string | null, want: string, name: string) {
