@@ -34,13 +34,13 @@ Run these top to bottom before the demo. Steps 1 and 2 need no phone; step 3 rin
 ### 1. Unit tests (no keys, no network)
 
 ```sh
-cd server    && bun install && bun test && bun run check   # 25 tests + typecheck
-cd care-team && bun test                                    # 8 tests (no dependencies to install)
-cd web       && bun install && bun test src && bun run build   # 7 tests + production build
+cd server    && bun install && bun test && bun run check   # tests + typecheck
+cd care-team && bun test                                    # tests (no dependencies to install)
+cd web       && bun install && bun test src && bun run build   # tests + production build
 cd actor     && bun install && bun run check                # typecheck
 ```
 
-Each line starts from the repo root. These were the results on the merged code (Oct 31, 13:55).
+Each line starts from the repo root. Every one should end with 0 fail or a clean exit. On the merge into `main` (Oct 31, 13:52): server 25, care-team 8, web 9 tests.
 
 ### 2. The whole stack, with the browser call
 
