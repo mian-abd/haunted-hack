@@ -1,8 +1,14 @@
 # Troska: an AI care team for aging parents
 
-## 🩺 **A doctor recommends Troska.**
+## 🩺 **A doctor is excited about Troska, and recommends it.**
 
-**We asked a general physician (GP) about Troska, and he recommends it.**
+**We asked a general physician (GP) about Troska. He was excited about the idea and recommended our app.**
+
+### Market validation
+
+- **A doctor wants it.** A general physician heard the idea, got excited about it and recommends Troska.
+- **The need is big.** 51 million Americans care for someone aged 50 or older, about 26 hours a week (AARP / National Alliance for Caregiving, *Caregiving in the U.S.* 2025). By 2030, 1 in 5 Americans will be over 65 (U.S. Census Bureau).
+- **YC asked for it.** "AI for the Aging Population" is on YC's Fall 2026 Request for Startups.
 
 A voice agent makes check-in calls to an elder, on a real phone: it confirms medications, runs teach-back and notices when something is off.
 Behind the call, doctor, pharmacy and family agents work the case with each other over Agent Relay, and one durable actor per elder remembers everything and schedules the next call.
