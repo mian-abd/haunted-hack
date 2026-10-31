@@ -9,7 +9,6 @@ const MAX_TEXT = 240 // Care Feed cards must stay short
 const TARGET_MS = 12_000 // symptom -> last hero message; FAIL when much over it
 
 type Ev = { id: string; ts: number; kind: string; text: string; from?: string; to?: string; data?: Record<string, any> }
-type Case = { kind: string; msgs: Ev[] }
 
 let failures = 0
 const check = (step: string, ok: boolean, detail = "") => {
@@ -34,23 +33,16 @@ async function until<T>(get: () => T | Promise<T>, ms: number, every = 100): Pro
   }
 }
 
-// agent_msg events grouped by the care-team case they belong to (the caretaker's opening message names the kind).
-function casesOf(msgs: Ev[]): Case[] {
-  const byId = new Map<string, Case>()
-  for (const m of msgs) {
-    const c = byId.get(m.data?.caseId) ?? byId.set(m.data?.caseId, { kind: "", msgs: [] }).get(m.data?.caseId)!
-    c.msgs.push(m)
-    if (m.data?.type === "case") c.kind = m.data.kind
-  }
-  return [...byId.values()]
-}
-const find = (c: Case | undefined, type: string) => c?.msgs.find(m => m.data?.type === type)
-function complete(c: Case): boolean {
-  if (c.kind === "symptom") {
-    const d = find(c, "decision")
-    return !!d && (!d.data!.refillMed || !!find(c, "refill_ready")) && (!d.data!.notifyFamily || !!find(c, "family_message"))
-  }
-  return !!find(c, c.kind === "refill" ? "refill_ready" : "family_message") // teach_back and summary go to the family agent
+// One case per call (care-team): every escalation of the call joins one case, and each med is refilled once.
+const ofType = (msgs: Ev[], type: string) => msgs.filter(m => m.data?.type === type)
+const kindsOf = (msgs: Ev[]) => ofType(msgs, "case").map(m => String(m.data!.kind)) // the caretaker posts one "case" message per escalation
+// One family text per family request: the teach-back, the summary and the doctor's notify_family.
+const familyWanted = (msgs: Ev[]) => kindsOf(msgs).filter(k => k === "teach_back" || k === "summary").length + (ofType(msgs, "decision")[0]?.data?.notifyFamily ? 1 : 0)
+function done(msgs: Ev[]): boolean {
+  const kinds = kindsOf(msgs), d = ofType(msgs, "decision")[0]
+  return ["symptom", "teach_back", "summary"].every(k => kinds.includes(k)) && !!d
+    && (!(kinds.includes("refill") || d.data!.refillMed) || ofType(msgs, "refill_ready").length > 0) // the doctor's or request_refill's
+    && ofType(msgs, "family_message").length >= familyWanted(msgs)
 }
 
 console.log(`Unc e2e · ${new Date().toISOString()}\n`)
@@ -98,25 +90,22 @@ for (const [name, args] of tools) {
 check("c. tool sequence via POST /api/tool", outputs.every(o => !o.includes("Error")), tools.map(([n]) => n).join(" > "))
 for (const o of outputs) console.log(`      ${o}`)
 
-// d. wait for the care team to finish every case, then the status change and the recheck
-const KINDS = ["symptom", "refill", "teach_back", "summary"]
+// d. wait for the care team to finish the call's case, then the status change and the recheck
 const agentMsgs = (st: any): Ev[] => st.timeline.filter((e: Ev) => e.kind === "agent_msg")
 const settled = await until(async () => {
   const st = await getState()
-  const cases = casesOf(agentMsgs(st))
-  const decision = find(cases.find(c => c.kind === "symptom"), "decision")
-  const ok = KINDS.every(k => cases.some(c => c.kind === k)) && cases.every(complete) && st.status !== "ok" && (!decision?.data?.recheck || st.nextCheckInAt)
-  return ok ? st : undefined
+  const m = agentMsgs(st)
+  return done(m) && st.status !== "ok" && (!ofType(m, "decision")[0]!.data!.recheck || st.nextCheckInAt) ? st : undefined
 }, 90_000, 250)
 s = settled ?? await getState()
 const msgs = agentMsgs(s)
-const cases = casesOf(msgs)
+const kinds = kindsOf(msgs)
 const t0 = firedAt.report_symptom!
 console.log(`\n      Agent thread (+seconds after report_symptom):`)
 for (const m of msgs) console.log(`      +${((m.ts - t0) / 1000).toFixed(1).padStart(5)} [${m.data?.lane}] ${m.from} -> ${m.to} (${m.data?.type}): ${m.text}`)
 console.log()
 
-check("d. care team finished every case", !!settled, settled ? `${cases.length} cases: ${cases.map(c => c.kind).join(", ")}` : "timed out after 90 s")
+check("d. care team finished the call's case", !!settled, settled ? `escalations: ${kinds.join(", ")}` : "timed out after 90 s")
 const lanes = ["doctor", "pharmacy", "family"].map(l => `${l} ${msgs.filter(m => m.data?.lane === l).length}`)
 check("d. agent_msg events in all three lanes", lanes.every(l => !l.endsWith(" 0")), lanes.join(", "))
 const h1 = await health()
@@ -131,32 +120,35 @@ const unreadable = msgs.filter(m => !m.text.trim() || m.text.length > MAX_TEXT |
 check(`d. texts short and plain (<= ${MAX_TEXT} chars, no JSON)`, unreadable.length === 0,
   unreadable.length ? unreadable.map(m => `${m.from} ${m.text.length} chars`).join("; ") : `longest ${Math.max(0, ...msgs.map(m => m.text.length))} chars`)
 
-// e. one case per escalating tool, no repeated message inside a case, no lane item outside the relay
-const keys = msgs.map(m => `${m.data?.caseId} ${m.from}>${m.to} ${m.data?.type}`)
-const dupes = keys.filter((k, i) => keys.indexOf(k) !== i)
+// e. one case per call: one thread, each escalation once, request_refill handled, each med readied once,
+// one family text per family request, no lane item outside the relay
+const caseIds = new Set(msgs.map(m => m.data?.caseId))
+const ready = ofType(msgs, "refill_ready").map(m => String(m.data?.med ?? "").split(" ")[0]!.toLowerCase())
+const viaDoctor = ofType(msgs, "refill_request").length > 0 // the doctor ordered it; one case per call then skips request_refill's duplicate
+const family = ofType(msgs, "family_message").length
 const stray = s.timeline.filter((e: Ev) => e.kind !== "agent_msg" && e.data?.lane)
-check("e. no duplicate lane items from a single trigger",
-  cases.length === KINDS.length && KINDS.every(k => cases.filter(c => c.kind === k).length === 1) && !dupes.length && !stray.length,
-  `cases per trigger: ${KINDS.map(k => `${k} ${cases.filter(c => c.kind === k).length}`).join(", ")}; repeated messages ${dupes.length}; server-written lane items ${stray.length}`)
+check("e. one case per call, no duplicate lane items",
+  caseIds.size === 1 && new Set(kinds).size === kinds.length && (kinds.includes("refill") || viaDoctor) && ofType(msgs, "decision").length === 1
+    && new Set(ready).size === ready.length && family === familyWanted(msgs) && !stray.length,
+  `${caseIds.size} case(s); escalations ${kinds.join(", ")}; refill ordered by ${viaDoctor ? "the doctor" : "request_refill"}, ready: ${ready.join(", ") || "none"}; family texts ${family}/${familyWanted(msgs)}; server-written lane items ${stray.length}`)
 
-// f. latency per hop, measured from the tool call that triggered each case
-const sym = cases.find(c => c.kind === "symptom")
-const at = (c: Case | undefined, type: string, from: number) => (find(c, type)?.ts ?? NaN) - from
-const firstReady = msgs.find(m => m.data?.type === "refill_ready")
-const hops: [string, number | string][] = [
-  ["report_symptom -> caretaker hands off to doctor", at(sym, "case", t0)],
-  ["report_symptom -> doctor decision", at(sym, "decision", t0)],
+// f. latency per hop, measured from the tool call that triggered it
+const at = (type: string, after = t0) => msgs.find(m => m.data?.type === type && m.ts >= after)?.ts ?? NaN
+const caseAt = (kind: string) => msgs.find(m => m.data?.type === "case" && m.data.kind === kind)?.ts ?? NaN
+const hops: [string, number][] = [
+  ["report_symptom -> caretaker hands off to doctor", caseAt("symptom") - t0],
+  ["report_symptom -> doctor decision", at("decision") - t0],
   ["report_symptom -> status set on the actor", (s.timeline.find((e: Ev) => e.kind === "status")?.ts ?? NaN) - t0],
-  ["report_symptom -> family message", at(sym, "family_message", t0)],
-  ["report_symptom -> doctor's own refill ready", find(sym, "decision")?.data?.refillMed ? at(sym, "refill_ready", t0) : "doctor ordered no refill"],
-  ["request_refill -> pharmacy refill ready", at(cases.find(c => c.kind === "refill"), "refill_ready", firedAt.request_refill!)],
-  ["teach_back_result -> family message", at(cases.find(c => c.kind === "teach_back"), "family_message", firedAt.teach_back_result!)],
-  ["end_call -> family message", at(cases.find(c => c.kind === "summary"), "family_message", firedAt.end_call!)],
+  ["report_symptom -> first family message", at("family_message") - t0],
+  viaDoctor ? ["report_symptom -> refill ready (doctor -> pharmacy)", at("refill_ready") - t0]
+    : ["request_refill -> refill ready (pharmacy)", at("refill_ready", firedAt.request_refill!) - firedAt.request_refill!],
+  ["teach_back_result -> next family message", at("family_message", caseAt("teach_back")) - firedAt.teach_back_result!],
+  ["end_call -> next family message", at("family_message", caseAt("summary")) - firedAt.end_call!],
 ]
 console.log(`\n      Latency (model ${h1.model}):`)
-for (const [label, ms] of hops) console.log(`      ${label.padEnd(48)} ${typeof ms === "string" ? ms : secs(ms)}`)
+for (const [label, ms] of hops) console.log(`      ${label.padEnd(52)} ${secs(ms)}`)
 // Total: from the first tool call until the doctor, pharmacy and family lanes all have their answer.
-const total = Math.max(at(sym, "decision", t0), at(sym, "family_message", t0), (firstReady?.ts ?? NaN) - t0)
+const total = Math.max(at("decision"), at("family_message"), at("refill_ready")) - t0
 check(`f. symptom -> doctor, pharmacy and family answered, near ${TARGET_MS / 1000} s`, Number.isFinite(total) && total <= TARGET_MS * 1.25, `total ${secs(total)}`)
 
 ws.close()
