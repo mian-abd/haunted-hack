@@ -1,0 +1,5 @@
+# Agent Relay agent tokens (secrets)
+.relay-agents.json
+# Typed actor client from `terse actor generate` (regenerate locally)
+generated/
+.durable-actors/
