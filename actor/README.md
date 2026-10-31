@@ -164,6 +164,9 @@ second instance (`--port 7101`, own `DURABLE_ACTORS_DATA_DIR`) so the restart te
   therefore re-arms the alarm from the persisted `nextCheckInAt` on its first wake (socket connect or any method call). With that: armed 40 s ahead,
   restarted, a dashboard-style socket reconnect only → fired 359 ms after its time. Crash test: armed 12 s ahead, `kill -9` the runtime, restart
   after the alarm time → state intact, overdue alarm fired right after reconnect.
+- Re-verified on a second machine (fresh Bun 1.4.4 + CLI 0.14.9 install, Oct 31 14:00): `SMOKE OK (full)` with `call_due` 36 ms after the
+  alarm time; clean restart with a 40 s alarm → state equal, fired 97 ms after its time; `kill -9` with an 8 s alarm, 10 s down → overdue
+  alarm fired on the first socket connect. The freshly generated client is byte-identical to the committed `server/generated` and `care-team/generated`.
 
 To show it in the demo:
 
@@ -184,7 +187,10 @@ bun smoke.ts verify             # "state after restart equals the snapshot" … 
 
 ## Deploy to Terse cloud (needs a human: browser login)
 
-Not deployed yet. Steps (from reading the CLI source; untested because they need the login):
+Not deployed yet. `terse auth login` needs an **organization** on the Terse account: after the device code is approved, the CLI
+polls `/sdk/auth/identify` for up to 5 min until the account has one (it sends you to `app.useterse.ai/app/organizations/create`).
+On Oct 31 three attempts stayed on "Waiting for organization creation" after creating the org in the browser (one ended in
+`429 — Too many requests`): ask the Terse team at the venue, or get a `TERSE_API_KEY` and put it in `actor/.env`. Steps (from reading the CLI source):
 
 ```sh
 terse auth login                                # opens the browser (add --no-browser to print the URL)
