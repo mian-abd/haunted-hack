@@ -95,6 +95,24 @@ test("the elder's own number finds their record, and the agent gets their histor
   expect(writes.some(w => w.method === "PATCH" && w.url.includes("patients?id=eq.grandpa-joe") && w.body.phone === "+15550000000")).toBe(true) // his number is now on file
 })
 
+test("history skips calls that say nothing (early hang-ups, calls that never connected) and keeps the last 3 real ones", async () => {
+  calls = [
+    { ended_at: "2026-10-31T21:42:34Z", summary: "Call ended before the wrap-up.", mood: "unknown" },
+    { ended_at: "2026-10-31T21:40:00Z", summary: "The check-in call did not connect (no-answer).", mood: null },
+    { ended_at: "2026-10-31T21:31:29Z", summary: "Dizzy since this morning; out of Amlodipine.", mood: "tired" },
+    { ended_at: "2026-10-31T21:20:00Z", summary: "Call ended.", mood: null },
+    { ended_at: "2026-10-31T21:10:00Z", summary: "Felt fine; took all meds.", mood: "good" },
+    { ended_at: "2026-10-31T21:00:00Z", summary: "Asked about the pharmacy hours.", mood: "calm" },
+    { ended_at: "2026-10-31T20:50:00Z", summary: "Oldest real call.", mood: "calm" },
+  ]
+  const v = await callIn("+15550000000")
+  expect(v.elder_context).not.toContain("before the wrap-up")
+  expect(v.elder_context).not.toContain("did not connect")
+  expect(v.elder_context).toContain("Dizzy since this morning; out of Amlodipine. (mood: tired)")
+  expect(v.elder_context).toContain("Asked about the pharmacy hours.")
+  expect(v.elder_context).not.toContain("Oldest real call.") // only the last 3 real calls
+})
+
 test("an outbound call rings the number on the elder's profile", async () => {
   patients.push({ id: "nana-rosa", name: "Rosa Alvarez", age: 84, conditions: [], phone: "+15550100777" })
   Object.assign(process.env, { ELEVENLABS_API_KEY: "xi-test", ELEVENLABS_AGENT_ID: "agent_test", ELEVENLABS_PHONE_NUMBER_ID: "phnum_test" })

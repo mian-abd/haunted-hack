@@ -142,15 +142,20 @@ export async function saveProfile(elderId: string, fields: Row): Promise<void> {
 
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
 
+// Summaries that say nothing about the person (an early hang-up, a call that never connected): kept in the archive,
+// left out of what the agent hears as their history.
+const EMPTY_SUMMARY = /^(call ended( before the wrap-up)?\.?|phone check-in finished\.?|the check-in call did not connect\b.*)$/i
+
 /** The person's history from Supabase, for the voice agent: their last calls and recent symptoms, newest first. */
 export async function historyFor(elderId: string): Promise<string[]> {
   if (!db()) return []
   const id = encodeURIComponent(elderId)
   try {
-    const [calls, symptoms]: Row[][] = await Promise.all([
-      rest("GET", `calls?patient_id=eq.${id}&summary=not.is.null&select=ended_at,summary,mood&order=ended_at.desc&limit=3`, undefined, ""),
+    const [recent, symptoms]: Row[][] = await Promise.all([
+      rest("GET", `calls?patient_id=eq.${id}&summary=not.is.null&select=ended_at,summary,mood&order=ended_at.desc&limit=12`, undefined, ""),
       rest("GET", `care_events?patient_id=eq.${id}&kind=eq.symptom&select=created_at,text,data&order=created_at.desc&limit=5`, undefined, ""),
     ])
+    const calls = recent.filter(c => !EMPTY_SUMMARY.test(String(c.summary).trim())).slice(0, 3)
     const lines: string[] = []
     if (calls.length) lines.push("Earlier calls (newest first):", ...calls.map(c => `- ${when(c.ended_at)}: ${String(c.summary).slice(0, 300)}${c.mood ? ` (mood: ${c.mood})` : ""}`))
     if (symptoms.length) lines.push("Recent symptoms on record:", ...symptoms.map(e => `- ${when(e.created_at)}: ${e.text}${e.data?.severity ? ` (${e.data.severity})` : ""}`))
