@@ -1,1 +1,6 @@
-{ "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
+{
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://candidates-evaluation-websites-invision.trycloudflare.com/api/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

@@ -11,3 +11,4 @@ supabase/.branches/
 .impeccable/mocks/
 .impeccable/review/
 .impeccable/build/
+.vercel/

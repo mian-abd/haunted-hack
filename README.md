@@ -109,6 +109,7 @@ Also built with: ElevenLabs and Twilio (the phone voice, both directions), cloud
 | Phone voice | **ElevenLabs** agent "Troska check-in" on our Twilio number "HH" | `server/.env`: see "3. The phone call" |
 | Care team | **Agent Relay** (Relaycast), anonymous 24 h workspace per start | `RELAY_WORKSPACE_KEY` to keep one workspace |
 | Agent brains, browser voice | **OpenAI** (`gpt-6-luna`, `gpt-realtime-2.1`) | `OPENAI_API_KEY` in `server/.env` and `care-team/.env` (or the root `.env` for dev.sh) |
+| Web app | **Vercel**, project `troska`: https://troska.vercel.app. Only the static site is there; `/api` is proxied to the server on Mian's laptop through the cloudflared tunnel | `web/vercel.json` (the tunnel URL) and `DEMO_ACCESS_KEY` in `server/.env`. See "The hosted web app" below |
 
 What Supabase holds, so the care history survives any restart or laptop: `patients`, `prescriptions` and `clinical_notes` (read by the demo reset and the doctor agent), `calls` (one row per call, with `started_at`, the summary, the mood and the ElevenLabs transcript), and `care_events` (every med, symptom, teach-back, refill and vitals event, every Agent Relay message, and every call ending).
 
@@ -213,6 +214,19 @@ The ElevenLabs agent "Troska check-in" and our Twilio number ("HH") already exis
 ### 4. Right before judging
 
 Press **Reset demo**, so no recheck alarm is left pending. Check that `curl localhost:8788/health` shows `"relay":"agent-relay"`. If you're demoing the phone, make sure the tunnel is still up, then ring it once with the `curl` above.
+
+### The hosted web app (Vercel)
+
+https://troska.vercel.app serves the web app from Vercel. The backend still runs locally: `web/vercel.json` rewrites `/api/*` to the cloudflared tunnel, and the tunnel reaches `server/` on port 8787. So the server and the tunnel must both be running.
+
+- **Open it once with the team code.** Visit `https://troska.vercel.app/live?key=<DEMO_ACCESS_KEY from server/.env>`. The browser remembers the code. Without it, the server answers 403 and the page shows "Offline".
+- **When the tunnel URL changes** (every time cloudflared restarts), put the new URL in `web/vercel.json`, then redeploy:
+
+```bash
+cd web && vercel deploy --prod
+```
+
+`vercel deploy` uploads `web/`, and Vercel builds it there with the `build` script. The project is already linked; the CLI keeps that link in `web/.vercel/`, which git ignores.
 
 ## Demo flow
 
