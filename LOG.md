@@ -16,6 +16,7 @@ A running log of what was done, newest at the bottom. Times are PT. Add your own
 - **12:50** Committed `care-team/`. The push to GitHub is waiting on repo access for the push tool. The OpenAI key lives only in the local `care-team/.env`, which git ignores.
 - **12:51** Linear: posted the care-team status and lane rule on YCH-3, the `/escalate` details and `/demo/storyline` on YCH-6 (server), and the seed names on YCH-5 (DB).
 - **12:58** Decision: care-team goes on its own branch, `mian/ych-3-care-team` (based on `feat/unc-plan-and-scaffold`), committed as Mian. Other people's branches stay untouched; merging is the team's call.
+- **13:00** Pushed `mian/ych-3-care-team` to GitHub, then linked it on YCH-3 in Linear.
 
 ### Open / needs
 - [ ] Agent Relay workspace key (`npx -y agent-relay@next init --hosted`) goes in `care-team/.env`, then run `bun run smoke:relay`.
