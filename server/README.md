@@ -76,6 +76,11 @@ bun run check       # tsc --noEmit (downloads typescript@5.9.3 through bunx)
 | `TERSE_ACTOR_URL`, `TERSE_API_KEY` | local dev | Read by the generated client at call time. Set both only for Terse cloud (see `actor/README.md`). |
 | `TERSE_FAKE` | unset | `1` = in-memory fake ElderActor |
 | `PORT` | `8787` | Lets you test next to another running server |
+| `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`, `ELEVENLABS_PHONE_NUMBER_ID`, `ELDER_PHONE` | unset | Phone check-in (below). Any one unset: `/api/call/dial` returns 503 and calls nobody. |
+| `EL_TOOL_SECRET` | unset | Shared secret the ElevenLabs webhook tools send as `x-unc-secret`. Unset: `/api/el/tool/*` answers 503. |
+| `ELEVENLABS_WEBHOOK_SECRET` | unset | HMAC secret of the ElevenLabs post-call webhook. Unset: `/api/el/post-call` answers 503. |
+| `AUTO_DIAL` | unset | `1` = when the actor's alarm makes a call due, ring the elder's phone (polls `getState` every 2 s; a failed dial waits 60 s) |
+| `ELDER_ID` | `grandpa-joe` | Elder for `AUTO_DIAL`, and for tool webhooks that arrive without `elder_id` |
 
 ## API
 
@@ -94,6 +99,9 @@ answers `OPTIONS` preflights.
 | `POST /api/demo/vitals` `{ elderId, heartRate, note? }` | Logs a `vitals` event, then escalates `kind: "vitals"` | `{ ok: true }` |
 | `POST /api/call/start` `{ elderId }` | `startCall()` | `{ ok: true }` |
 | `POST /api/call/end` `{ elderId, summary, mood? }` | `endCall()` and the Supabase archive. A missing summary becomes `"Call ended."` | `{ ok: true }` |
+| `POST /api/call/dial` `{ elderId }` | ElevenLabs `POST /v1/convai/twilio/outbound-call` from our Twilio number to `ELDER_PHONE`, then `startCall()` and a `note` "Calling Joe's phone". 409 while a call is in progress; 502 with ElevenLabs' message if it refuses | `{ conversationId, callSid }` |
+| `POST /api/el/tool/:name` (header `x-unc-secret`) | The ElevenLabs webhook tools: runs voice tool `:name` (table below) with the JSON body as its args. `elder_id` in the body picks the elder | `{ output }` |
+| `POST /api/el/post-call` (header `ElevenLabs-Signature`) | `post_call_transcription`: logs a `note` "Call recap: …" from `analysis.transcript_summary`. `call_initiation_failure`: logs why. Either one ends a call that is still in progress | `{ ok: true }` |
 
 Voice tools (`POST /api/tool`):
 
@@ -113,6 +121,26 @@ legacy JWT `service_role` key: a new `sb_secret_...` key is not a JWT, and Supab
 in `src/server.ts`, unit-tested). It writes
 `calls { patient_id, summary, mood }` and `care_events { patient_id, kind: "call_ended", from_agent: "system", text, data: { mood } }`.
 Columns follow `supabase/migrations/20261031120000_init.sql`. The archive is also fire-and-forget.
+
+## Phone check-in (ElevenLabs + Twilio)
+
+The ElevenLabs agent "Unc check-in" talks to the elder on a real phone call from our Twilio number, and calls the
+same five voice tools as the browser call, as webhook tools on `/api/el/tool/*`. Code: `src/elevenlabs.ts`.
+
+1. Expose the server: `cloudflared tunnel --url http://localhost:8787` (or ngrok). Copy the `https://` URL.
+2. In `server/.env`: `ELEVENLABS_API_KEY`, `ELEVENLABS_PHONE_NUMBER_ID` (`phnum_…`, from
+   `elevenlabs agents phone-numbers list`), `ELDER_PHONE` (the phone that rings, `+1…`), and any long random
+   `EL_TOOL_SECRET`. Never commit them.
+3. `PUBLIC_URL=https://<tunnel> bun run el:setup` creates or updates the agent, its tools and a stored secret, and
+   points the Twilio number at the agent. Put the printed `ELEVENLABS_AGENT_ID` in `server/.env`. Re-run it whenever
+   the tunnel URL changes.
+4. Start the server with `AUTO_DIAL=1`: when the countdown ends, the phone rings. `POST /api/call/dial` rings it now.
+
+Per call, the server sends the dynamic variables `elder_id`, `elder_first_name` and `elder_context` (profile, meds,
+teach-back medicine, current status), so the agent always has the actor's latest state. The agent's own tool for the
+closing summary is `save_call_summary` (it maps to `end_call` here), because `end_call` is ElevenLabs' built-in
+hang-up. The post-call webhook is optional: create it in the ElevenLabs dashboard (Agents settings → post-call
+webhook → `https://<tunnel>/api/el/post-call`) and put its secret in `ELEVENLABS_WEBHOOK_SECRET`.
 
 ## How it connects
 
@@ -141,4 +169,7 @@ Columns follow `supabase/migrations/20261031120000_init.sql`. The archive is als
   `calls.transcript` stay empty.
 - The `end_call` tool and `POST /api/call/end` both end the call. Calling both for one call logs two `call_ended` events
   and archives twice. web/ should use `/api/call/end` only when a call ends without the tool.
-- The API has no auth (local demo). CORS stops other websites, not other local processes.
+- The API has no auth (local demo). CORS stops other websites, not other local processes. Through a tunnel the
+  whole API is public; only `/api/el/*` checks a secret.
+- A live word-by-word transcript of the phone call needs ElevenLabs' enterprise monitoring, so the dashboard sees the
+  tool events live and the recap after hang-up. The post-call transcript is not archived to `calls.transcript` yet.

@@ -1,0 +1,151 @@
+// Creates or updates the "Unc check-in" ElevenLabs agent (PLAN.md "ElevenLabs agent"): the phone prompt, its five
+// webhook tools pointing at PUBLIC_URL, and the built-in end_call. With ELEVENLABS_PHONE_NUMBER_ID set, it also moves
+// our Twilio number to this agent. Safe to re-run; run it again whenever the tunnel URL changes:
+//   cd server && PUBLIC_URL=https://<tunnel> bun run el:setup
+// Needs ELEVENLABS_API_KEY and EL_TOOL_SECRET (server/.env or the shell). Prints the agent id for server/.env.
+import { elderContext } from "../src/elevenlabs"
+import type { ElderState } from "../src/actor"
+
+const NAME = "Unc check-in"
+const SECRET_NAME = "unc_tool_secret"
+const API = "https://api.elevenlabs.io/v1/convai"
+const env = (k: string) => process.env[k]?.trim() ?? ""
+const key = env("ELEVENLABS_API_KEY")
+const publicUrl = env("PUBLIC_URL").replace(/\/+$/, "")
+const toolSecret = env("EL_TOOL_SECRET")
+if (!key || !publicUrl || !toolSecret) {
+  console.error("Set ELEVENLABS_API_KEY, PUBLIC_URL (the https tunnel to :8787) and EL_TOOL_SECRET.")
+  process.exit(1)
+}
+
+async function api(method: string, path: string, body?: unknown): Promise<any> {
+  const r = await fetch(`${API}${path}`, {
+    method,
+    headers: { "xi-api-key": key, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  const text = await r.text()
+  if (!r.ok) throw new Error(`${method} ${path} -> ${r.status}: ${text.slice(0, 500)}`)
+  return text ? JSON.parse(text) : {}
+}
+
+// Fixed half of the prompt. The elder-specific half arrives per call as {{elder_context}} (src/elevenlabs.ts).
+const PROMPT = `You are Unc, a warm care companion making a scheduled check-in phone call to an older adult.
+
+{{elder_context}}
+
+Style: be warm and speak slowly. Use short sentences. Ask one question at a time, then wait for the answer. This is a phone call, so never use lists, markdown or emojis.
+
+Medicines: go through each medicine due today. Ask whether they took it, and call confirm_medication once per medicine.
+
+Teach-back: ask them to explain in their own words when and how they take the teach-back medicine. If they get it wrong, gently correct them and have them say it back. Then call teach_back_result (understood = whether they had it right the first time).
+
+Symptoms: when they mention any symptom, call report_symptom. If they are out of a medicine or running low, offer a refill and call request_refill.
+
+Finish: give a short summary of what you heard and what happens next, call save_call_summary, say goodbye warmly, then call end_call to hang up.
+
+Safety: never diagnose and never change doses. For danger signs (chest pain, trouble breathing, fainting, slurred speech, weakness on one side, a bad fall), tell them to call 911 right now, call report_symptom with severity high, and stay calm and reassuring.`
+
+const str = (description: string) => ({ type: "string", description })
+const bool = (description: string) => ({ type: "boolean", description })
+const elderId = { type: "string", dynamic_variable: "elder_id" } // filled by ElevenLabs, not the LLM
+
+// ElevenLabs tool name → server tool (POST /api/el/tool/<server tool>). Ours can't be called end_call: that name is
+// the agent's built-in hang-up.
+const TOOLS: { name: string; path: string; description: string; properties: Record<string, unknown>; required: string[] }[] = [
+  { name: "confirm_medication", path: "confirm_medication", description: "Record whether the elder took one of their medicines today. Call once per medicine.",
+    properties: { med: str("Medicine name as listed"), taken: bool("Whether they took it today"), note: str("Anything they said about it, e.g. ran out") }, required: ["med", "taken"] },
+  { name: "report_symptom", path: "report_symptom", description: "Log a symptom the elder mentions. Use severity high for danger signs.",
+    properties: { symptom: str("The symptom, in their words"), severity: { type: "string", enum: ["low", "medium", "high"], description: "low, medium, or high for danger signs" } }, required: ["symptom", "severity"] },
+  { name: "teach_back_result", path: "teach_back_result", description: "Record whether the elder explained correctly, in their own words, when and how they take a medicine.",
+    properties: { med: str("Medicine name"), understood: bool("Whether they had it right the first time"), note: str("What they got wrong and the correction") }, required: ["med", "understood"] },
+  { name: "request_refill", path: "request_refill", description: "Ask the pharmacy to refill a medicine the elder is out of or low on.",
+    properties: { med: str("Medicine name") }, required: ["med"] },
+  { name: "save_call_summary", path: "end_call", description: "Save the closing summary of the check-in for the family and the doctor. Call it once, just before hanging up.",
+    properties: { summary: str("2-3 sentences for the family and the doctor"), mood: str("Their mood, in a few words") }, required: ["summary", "mood"] },
+]
+
+// The shared secret travels as a stored ElevenLabs secret, so it never sits in plain text on the agent.
+async function secretId(): Promise<string> {
+  const { secrets = [] } = await api("GET", `/secrets?search=${SECRET_NAME}`)
+  const found = secrets.find((s: any) => s.name === SECRET_NAME)
+  if (found) return (await api("PATCH", `/secrets/${found.secret_id}`, { type: "update", name: SECRET_NAME, value: toolSecret })).secret_id ?? found.secret_id
+  return (await api("POST", "/secrets", { type: "new", name: SECRET_NAME, value: toolSecret })).secret_id
+}
+
+async function upsertTools(secret: string): Promise<string[]> {
+  const { tools: existing = [] } = await api("GET", "/tools?types=webhook&page_size=100")
+  const ids: string[] = []
+  for (const t of TOOLS) {
+    const tool_config = {
+      type: "webhook",
+      name: t.name,
+      description: t.description,
+      response_timeout_secs: 20,
+      api_schema: {
+        url: `${publicUrl}/api/el/tool/${t.path}`,
+        method: "POST",
+        request_headers: { "x-unc-secret": { secret_id: secret } },
+        request_body_schema: { type: "object", properties: { ...t.properties, elder_id: elderId }, required: [...t.required, "elder_id"] },
+      },
+    }
+    const old = existing.find((x: any) => x.tool_config?.name === t.name && x.tool_config?.api_schema?.url?.includes("/api/el/tool/"))
+    const saved = old ? await api("PATCH", `/tools/${old.id}`, { tool_config }) : await api("POST", "/tools", { tool_config })
+    console.log(`${old ? "updated" : "created"} tool ${t.name} -> ${tool_config.api_schema.url}`)
+    ids.push(saved.id)
+  }
+  return ids
+}
+
+// Default values for dynamic calls started without variables (e.g. "Test AI agent" in the dashboard): the seed elder.
+async function placeholders(): Promise<Record<string, string>> {
+  const seed = await Bun.file(new URL("../../supabase/seed.json", import.meta.url)).json()
+  const p = seed.patients.find((x: any) => x.id === "grandpa-joe")
+  const state: ElderState = {
+    profile: { name: p.name, age: p.age, conditions: p.conditions, family: { name: p.family_name, relation: p.family_relation } },
+    meds: seed.prescriptions.filter((r: any) => r.patient_id === p.id)
+      .map((r: any) => ({ name: r.name, dose: r.dose, times: r.times, purpose: r.purpose, lastTakenAt: null, missedCount: 0 })),
+    status: "ok", statusReason: "", callState: "idle", nextCheckInAt: null, timeline: [],
+  }
+  return { elder_id: p.id, elder_first_name: p.name.split(" ")[0], elder_context: elderContext(state) }
+}
+
+async function upsertAgent(toolIds: string[]): Promise<string> {
+  const conversation_config = {
+    agent: {
+      first_message: "Hi {{elder_first_name}}, it's Unc calling for your check-in. How are you feeling today?",
+      language: "en",
+      dynamic_variables: { dynamic_variable_placeholders: await placeholders() },
+      prompt: {
+        prompt: PROMPT,
+        llm: env("ELEVENLABS_LLM") || "gemini-3.5-flash",
+        temperature: 0.3,
+        tool_ids: toolIds,
+        built_in_tools: { end_call: { type: "system", name: "end_call", description: "", params: { system_tool_type: "end_call" } } },
+      },
+    },
+    ...(env("ELEVENLABS_VOICE_ID") ? { tts: { voice_id: env("ELEVENLABS_VOICE_ID") } } : {}),
+    conversation: { max_duration_seconds: 600 },
+  }
+  let id = env("ELEVENLABS_AGENT_ID")
+  if (!id) {
+    const { agents = [] } = await api("GET", `/agents?search=${encodeURIComponent(NAME)}&page_size=50`)
+    id = agents.find((a: any) => a.name === NAME)?.agent_id ?? ""
+  }
+  if (id) {
+    await api("PATCH", `/agents/${id}`, { name: NAME, conversation_config })
+    console.log(`updated agent ${NAME} (${id})`)
+    return id
+  }
+  const created = await api("POST", "/agents/create", { name: NAME, tags: ["unc"], conversation_config })
+  console.log(`created agent ${NAME} (${created.agent_id})`)
+  return created.agent_id
+}
+
+const agentId = await upsertAgent(await upsertTools(await secretId()))
+const phone = env("ELEVENLABS_PHONE_NUMBER_ID")
+if (phone) {
+  await api("PATCH", `/phone-numbers/${phone}`, { agent_id: agentId })
+  console.log(`phone number ${phone} now rings agent ${agentId}`)
+}
+console.log(`\nPut this in server/.env:\nELEVENLABS_AGENT_ID=${agentId}`)

@@ -9,7 +9,8 @@
         "start": "bun run src/server.ts",
         "dev": "bun --watch run src/server.ts",
         "test": "bun test",
-        "check": "bunx -p typescript@5.9.3 tsc --noEmit"
+        "check": "bunx -p typescript@5.9.3 tsc --noEmit",
+        "el:setup": "bun run scripts/elevenlabs-agent.ts"
     },
     "devDependencies": {
         "@types/bun": "1.4.2"
