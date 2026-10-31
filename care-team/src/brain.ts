@@ -54,8 +54,35 @@ export function caseNote(c: Data, r: HospitalRecord): Promise<string> {
     () => `New ${String(c.kind).replace("_", "-")} case for ${nameOf(r, c.elderId)}: ${c.reason}${details ? ` (${details})` : ""}. @${c.for}, can you take it?`)
 }
 
-export function triage(c: Data, r: HospitalRecord): Promise<Decision> {
-  return think("doctor", async () => {
+// Safety floor: rule-based danger signs are always urgent. The LLM may raise urgency, never lower it.
+const DANGER = /chest pain|trouble breathing|can'?t breathe|cannot breathe|short(ness)? of breath|faint|passed out|\bfell\b|\ba fall\b|fallen|slurred/i
+
+export function dangerSign(c: Data): string | null {
+  const hr = Number(c.details?.heartRate)
+  if (Number.isFinite(hr) && hr > 0 && (hr >= 130 || hr <= 40)) return `Heart rate ${hr} bpm`
+  if (c.details?.severity === "high") return `High-severity symptom: ${c.reason}`
+  return DANGER.test(`${c.reason} ${Object.values(c.details ?? {}).join(" ")}`) ? `Danger sign: ${c.reason}` : null
+}
+
+// Canned urgent decision (mock mode, and whenever the floor overrides the LLM). Refill only if the case mentions running out.
+function urgentDecision(c: Data, r: HospitalRecord, danger: string): Decision {
+  const text = `${c.reason} ${Object.values(c.details ?? {}).join(" ")}`.toLowerCase()
+  const p = /ran out|run out|out of|refill/.test(text) ? r.prescriptions.find((x) => text.includes(x.name.toLowerCase().split(" ")[0])) : undefined
+  const clinician = r.patient?.primary_doctor ?? "the on-call clinician"
+  return {
+    urgency: "urgent",
+    reason: danger,
+    actions: ["Call 911 if chest pain, trouble breathing or he can't stand", `Page ${clinician} (a human) now`, "Family: call him or go to him now", "Quick recheck call"],
+    refillMed: p?.name ?? null,
+    notifyFamily: true,
+    recheck: true,
+    text: `Triage for ${nameOf(r, c.elderId)}: URGENT. ${danger}. This needs a human now: call 911 if he has chest pain, trouble breathing or can't stand, and I'm paging ${clinician}. Family should call him or go to him now.`,
+  }
+}
+
+export async function triage(c: Data, r: HospitalRecord): Promise<Decision> {
+  const danger = dangerSign(c)
+  const d = await think("doctor", async (): Promise<Decision> => {
     const j = JSON.parse(await llm(ROLE.doctor, { case: c, record: r }, true))
     return {
       urgency: ["ok", "watch", "urgent"].includes(j.urgency) ? j.urgency : "watch",
@@ -66,8 +93,9 @@ export function triage(c: Data, r: HospitalRecord): Promise<Decision> {
       recheck: Boolean(j.recheck),
       text: String(j.message ?? j.reason ?? ""),
     }
-  }, () => {
-    // shortcut: canned storyline decision (dizziness + missed Amlodipine) whatever the case says; OpenAI mode really triages
+  }, (): Decision => {
+    if (danger) return urgentDecision(c, r, danger)
+    // shortcut: canned storyline decision (dizziness + missed Amlodipine) for any non-urgent case; OpenAI mode really triages
     const p = findMed(r, "amlodipine")
     const med = p ? `${p.name} ${p.dose}` : "Amlodipine 5 mg"
     return {
@@ -80,6 +108,9 @@ export function triage(c: Data, r: HospitalRecord): Promise<Decision> {
       text: `Triage for ${nameOf(r, c.elderId)}: WATCH. The dizziness most likely comes from the missed Amlodipine, and no red flags were reported. Plan: refill ${med}, recheck in 2h, notify family. Do not double the dose.`,
     }
   })
+  if (!danger || d.urgency === "urgent") return d
+  console.warn(`[brain] doctor: LLM said ${d.urgency} despite "${danger}"; the safety floor makes it urgent`)
+  return urgentDecision(c, r, danger)
 }
 
 export function refillNote(med: string | undefined, r: HospitalRecord): Promise<{ text: string; med: string }> {
@@ -95,7 +126,9 @@ export function familyText(req: Data, r: HospitalRecord): Promise<string> {
     // shortcut: canned copy written for the demo elder (Grandpa Joe, texting his daughter)
     const who = /daughter|son/i.test(r.patient?.family_relation ?? "") ? "Dad" : nameOf(r, req.elderId)
     const body =
-      req.type === "notify_family"
+      req.type === "notify_family" && req.urgency === "urgent"
+        ? `${who} needs attention now: ${req.reason}. The care team has paged his doctor. Please call him or go to him now; if he can't answer or has chest pain, call 911.`
+      : req.type === "notify_family"
         ? `${who} is OK but felt dizzy today. He ran out of his blood pressure pill, so the pharmacy is getting a refill ready and we will call him again in 2 hours. No need to rush over; we will text you if anything changes.`
         : req.kind === "teach_back"
           ? `${who} mixed up when to take one of his medicines (${req.reason}). We went over it together; a gentle reminder from you would help too.`

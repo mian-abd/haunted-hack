@@ -4,11 +4,15 @@
 import type { Agent, Relay } from "./relay"
 import type { ActorBridge } from "./actor"
 import { loadRecord } from "./records"
-import { caseNote, triage, refillNote, familyText } from "./brain"
+import { caseNote, triage, refillNote, familyText, type Urgency } from "./brain"
 
 export const KINDS = ["symptom", "refill", "vitals", "summary", "teach_back"] as const
 export type Escalation = { elderId: string; kind: (typeof KINDS)[number]; reason: string; details?: Record<string, unknown> }
 type Lane = "doctor" | "pharmacy" | "family"
+type Case = { id: string; lastAt: number; refills: Set<string>; urgency: Urgency }
+
+const RANK: Record<Urgency, number> = { ok: 0, watch: 1, urgent: 2 }
+const medKey = (med: unknown) => String(med ?? "").trim().split(/\s+/)[0].toLowerCase()
 
 export const channelFor = (elderId: string) => `care-${elderId.toLowerCase().replace(/[^a-z0-9-]+/g, "-")}`
 
@@ -35,10 +39,37 @@ export function startCareTeam(relay: Relay, actor: ActorBridge, records = loadRe
 
   const owner = (kind: Escalation["kind"]): Lane => (kind === "refill" ? "pharmacy" : kind === "summary" || kind === "teach_back" ? "family" : "doctor")
 
+  // One case per call: escalations for an elder within CASE_WINDOW_MS join the open case, so one call is one thread.
+  const open = new Map<string, Case>() // by elderId
+  const byId = new Map<string, Case>()
+  function caseFor(elderId: string): Case {
+    const now = Date.now()
+    const c = open.get(elderId)
+    if (c && now - c.lastAt < Number(process.env.CASE_WINDOW_MS || 180_000)) return Object.assign(c, { lastAt: now })
+    if (c) byId.delete(c.id)
+    const fresh: Case = { id: crypto.randomUUID().slice(0, 8), lastAt: now, refills: new Set(), urgency: "ok" }
+    open.set(elderId, fresh)
+    byId.set(fresh.id, fresh)
+    return fresh
+  }
+  // Each med is refilled once per case: the first request wins. Synchronous check-and-mark, so two requests cannot race.
+  function firstRefill(k: Case | undefined, med: unknown): boolean {
+    const key = medKey(med)
+    if (!k || !key) return true
+    if (k.refills.has(key)) return false
+    k.refills.add(key)
+    return true
+  }
+
   // Returns at once with the case id; the agents work the case asynchronously.
   function escalate(e: Escalation): string {
-    const caseId = crypto.randomUUID().slice(0, 8)
-    const c = { type: "case", caseId, elderId: e.elderId, kind: e.kind, reason: e.reason, details: e.details ?? {}, for: owner(e.kind) }
+    const k = caseFor(e.elderId)
+    const caseId = k.id
+    if (e.kind === "refill" && !firstRefill(k, e.details?.med)) {
+      console.log(`[care-team] case ${caseId}: ${e.details?.med} refill already requested, skipping`)
+      return caseId
+    }
+    const c ={ type: "case", caseId, elderId: e.elderId, kind: e.kind, reason: e.reason, details: e.details ?? {}, for: owner(e.kind) }
     void (async () => {
       await relay.ensureChannel(channelFor(e.elderId))
       await send("caretaker", c.for, c.for, await caseNote(c, await records(e.elderId)), c)
@@ -51,16 +82,20 @@ export function startCareTeam(relay: Relay, actor: ActorBridge, records = loadRe
     const { caseId, elderId } = m.data
     const record = await records(elderId)
     const d = await triage(m.data, record)
+    const k = byId.get(caseId)
+    if (k && RANK[k.urgency] > RANK[d.urgency]) d.urgency = k.urgency // within a case, urgency never goes down
+    if (k) k.urgency = d.urgency
     const name = record.patient?.name ?? elderId
     await send("doctor", "caretaker", "doctor", d.text, { type: "decision", caseId, elderId, urgency: d.urgency, reason: d.reason, actions: d.actions, recheck: d.recheck })
-    if (d.refillMed) await send("doctor", "pharmacy", "pharmacy", `Please refill ${d.refillMed} for ${name} today.`, { type: "refill_request", caseId, elderId, med: d.refillMed }, "pharmacy")
+    if (d.refillMed && firstRefill(k, d.refillMed)) await send("doctor", "pharmacy", "pharmacy", `Please refill ${d.refillMed} for ${name} today.`, { type: "refill_request", caseId, elderId, med: d.refillMed }, "pharmacy")
     if (d.notifyFamily) await send("doctor", "family", "family", `Please update ${name}'s family. Status: ${d.urgency.toUpperCase()}. ${d.reason}. Plan: ${d.actions.join("; ")}.`, { type: "notify_family", caseId, elderId, urgency: d.urgency, reason: d.reason, actions: d.actions }, "family")
   })
 
   relay.listen("caretaker", async (m) => {
     if (m.data.type !== "decision") return
     await actor.setStatus(m.data.elderId, m.data.urgency, m.data.reason)
-    if (m.data.recheck) await actor.scheduleCheckIn(m.data.elderId, Date.now() + Number(process.env.RECHECK_SECONDS || 120) * 1000, "Doctor asked for a recheck")
+    const secs = m.data.urgency === "urgent" ? Number(process.env.URGENT_RECHECK_SECONDS || 60) : Number(process.env.RECHECK_SECONDS || 120)
+    if (m.data.recheck) await actor.scheduleCheckIn(m.data.elderId, Date.now() + secs * 1000, "Doctor asked for a recheck")
   })
 
   relay.listen("pharmacy", async (m) => {
