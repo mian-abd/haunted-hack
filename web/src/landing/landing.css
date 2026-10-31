@@ -1,0 +1,182 @@
+/* Hallmark · macrostructure: phone-first one-pager with live hero vignette · tone: soft · anchor hue: navy + apricot */
+/* Landing page "/". Every class is lp- or vg-prefixed because this file ships in the same bundle as /live.
+   Motion thesis: one authored moment (the hero call vignette), the ringing call button, and short reveals that
+   explain order (steps) and arrival (messages). Hidden start states live only under no-preference, so reduced
+   motion shows every final state. */
+.lp-wrap { width: min(100% - 2 * var(--gutter), var(--page)); margin-inline: auto; }
+.lp .btn { white-space: nowrap; }
+
+/* ---------- header ---------- */
+.lp-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding-block: var(--space-5); }
+.lp-wordmark { font-family: var(--font-display); font-size: 34px; line-height: 1; text-decoration: none; }
+.lp-nav { display: flex; align-items: center; gap: var(--space-6); }
+.lp-nav a { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 44px; white-space: nowrap; text-decoration: none; color: var(--ink-2); }
+.lp-nav a:hover { color: var(--ink); text-decoration: underline; }
+.lp-nav .lp-nav-call { font-weight: 700; color: var(--ink); }
+
+/* ---------- hero ---------- */
+.lp-hero {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: center; gap: var(--space-8);
+  padding-block: var(--space-5) var(--space-9);
+}
+.lp-hero h1 { max-width: 11ch; }
+.lp-lede { max-width: 32ch; margin-top: var(--space-5); font-size: clamp(20px, 1.8vw, 24px); line-height: 1.45; }
+.lp-actions { isolation: isolate; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-6); margin-top: var(--space-7); }
+.lp-call { position: relative; min-height: 64px; padding: 16px 32px; font-size: 20px; }
+.lp-call .icon { width: 22px; height: 22px; }
+.lp-watch { display: inline-flex; align-items: center; min-height: 48px; font-weight: 700; text-underline-offset: 0.25em; }
+
+/* The ring: two soft apricot halos swell out from behind the button and fade, ring-ring, then rest. */
+.lp-call::before, .lp-call::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
+  background: var(--accent); opacity: 0; pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .lp-call::before, .lp-call::after { animation: lp-ring 3s var(--ease-out) infinite paused; }
+  .lp-call::after { animation-delay: 0.35s; }
+  .lp-actions[data-live] .lp-call::before, .lp-actions[data-live] .lp-call::after { animation-play-state: running; }
+}
+@keyframes lp-ring {
+  0% { opacity: 0.45; transform: scale(1); }
+  45%, 100% { opacity: 0; transform: scale(1.05, 1.5); }
+}
+
+/* ---------- hero vignette: one check-in call, what Troska heard, who it told ---------- */
+.vg-photo { position: relative; }
+.vg-photo img { width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; border-radius: var(--radius); background: var(--surface-2); }
+.vg-pill {
+  position: absolute; top: var(--space-4); left: var(--space-4);
+  display: inline-flex; align-items: center; gap: var(--space-3); padding: 8px 18px 8px 14px;
+  border-radius: var(--radius-pill); background: var(--ink); color: var(--surface);
+  font-size: var(--text-small); font-weight: 700; line-height: 1.2; white-space: nowrap; box-shadow: var(--shadow);
+}
+.vg-bars { display: inline-flex; align-items: center; gap: 3px; height: 18px; }
+.vg-bars i { width: 3px; height: 100%; border-radius: 2px; background: var(--accent); transform: scaleY(0.6); }
+.vg-bars i:nth-child(2) { transform: scaleY(1); }
+.vg-bars i:nth-child(3) { transform: scaleY(0.45); }
+.vg-bars i:nth-child(4) { transform: scaleY(0.8); }
+@media (prefers-reduced-motion: no-preference) {
+  .vg-bars i { animation: vg-bar 0.8s var(--ease-out) infinite alternate paused; }
+  .vg-bars i:nth-child(2) { animation-delay: -0.3s; }
+  .vg-bars i:nth-child(3) { animation-delay: -0.55s; }
+  .vg-bars i:nth-child(4) { animation-delay: -0.15s; }
+  .vg[data-live] .vg-bars i { animation-play-state: running; }
+}
+@keyframes vg-bar { from { transform: scaleY(0.25); } to { transform: scaleY(1); } }
+
+.vg-panel {
+  position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5);
+  margin: calc(-1 * var(--space-8)) var(--space-5) 0; padding: var(--space-5);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.vg-label { margin-bottom: var(--space-3); font-size: 15px; font-weight: 700; color: var(--ink-2); }
+.vg-panel ul { display: grid; gap: var(--space-2); }
+.vg-note {
+  display: flex; align-items: baseline; gap: var(--space-2); padding: 8px 12px;
+  border-radius: 12px; background: var(--accent-soft); font-size: 16px; line-height: 1.35;
+}
+.vg-note::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); transform: translateY(-1px); }
+.vg-msg { display: grid; gap: 2px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; font-size: 16px; line-height: 1.35; }
+.vg-who { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 var(--space-2); }
+.vg-what { color: var(--ink-2); font-size: 15px; }
+.vg-tick { display: inline-flex; align-items: center; gap: 4px; color: var(--ok); font-size: 14px; font-weight: 700; }
+.vg-tick .icon { width: 16px; height: 16px; stroke-width: 2.5; }
+
+/* Each step arrives on its beat; at the end of the loop everything leaves together, faster than it came. */
+.vg-step, .vg-tick { transition: opacity var(--dur-exit) var(--ease-out), transform var(--dur-exit) var(--ease-out); }
+.vg-step:not(.is-on) { opacity: 0; transform: translateY(8px); }
+.vg-msg:not(.is-on) { transform: translateX(-16px); }
+.vg-tick:not(.is-on) { opacity: 0; transform: scale(0.6); }
+.vg-step.is-on, .vg-tick.is-on { transition-duration: var(--dur-enter); }
+
+/* ---------- sections ---------- */
+.lp-section { padding-block: var(--space-9); border-top: 1px solid var(--line); }
+.lp-section > h2 { max-width: 20ch; margin-bottom: var(--space-7); }
+
+/* what happens when you call: a list that arrives in order */
+.lp-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-7); }
+.lp-steps li {
+  display: grid; gap: var(--space-4); align-content: start;
+  transition: opacity var(--dur-enter) var(--ease-out), transform var(--dur-enter) var(--ease-out);
+  transition-delay: calc(var(--i, 0) * 120ms);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .lp-steps:not([data-in]) li { opacity: 0; transform: translateY(16px); }
+}
+.lp-steps p { max-width: 28ch; font-size: 22px; line-height: 1.45; }
+.lp-step-icon { display: grid; place-items: center; width: 56px; height: 56px; border: 1.5px solid var(--line); border-radius: 50%; background: var(--surface); }
+.lp-step-icon .icon { width: 26px; height: 26px; }
+
+/* see it work (only when VITE_DEMO_VIDEO_URL is set) */
+.lp-video { overflow: hidden; max-width: 760px; aspect-ratio: 16 / 9; border-radius: var(--radius); background: var(--ink); }
+.lp-video video, .lp-video iframe { width: 100%; height: 100%; border: 0; }
+
+/* what the family and the doctor get: a typing indicator, then the message */
+.lp-gets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-7); }
+.lp-gets h2 { margin-bottom: var(--space-5); font-size: clamp(28px, 2.8vw, 36px); }
+.lp-msg { padding: var(--space-6); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.lp-msg figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); font-size: var(--text-small); color: var(--ink-2); }
+.lp-tag { padding: 2px 12px; border-radius: var(--radius-pill); background: var(--surface-2); font-size: 15px; font-weight: 700; color: var(--ink-2); }
+.lp-msg-body { display: grid; margin-top: var(--space-4); }
+.lp-msg-body > * { grid-area: 1 / 1; }
+.lp-msg blockquote { margin: 0; transition: opacity var(--dur-enter) var(--ease-out), transform var(--dur-enter) var(--ease-out); }
+.lp-msg blockquote p { font-size: 21px; line-height: 1.5; }
+.lp-typing {
+  display: inline-flex; align-items: center; gap: 6px; align-self: start; justify-self: start;
+  padding: 14px 18px; border-radius: var(--radius-pill); background: var(--surface-2);
+  opacity: 0; transition: opacity var(--dur-exit) var(--ease-out);
+}
+.lp-typing i { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-2); }
+.lp-msg[data-state="typing"] .lp-typing { opacity: 1; }
+.lp-msg[data-state="typing"] .lp-typing i { animation: lp-dot 0.6s var(--ease-out) infinite alternate; }
+.lp-msg[data-state="typing"] .lp-typing i:nth-child(2) { animation-delay: 0.2s; }
+.lp-msg[data-state="typing"] .lp-typing i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes lp-dot { from { opacity: 0.3; transform: translateY(2px); } to { opacity: 1; transform: translateY(-2px); } }
+.lp-msg:not([data-state="sent"]) blockquote { opacity: 0; transform: translateY(8px); }
+
+/* trust line */
+.lp-trust { max-width: 36ch; margin-inline: auto; text-align: center; font-size: clamp(23px, 2.4vw, 30px); line-height: 1.4; text-wrap: balance; }
+
+/* ---------- closing band, footer ---------- */
+.lp-closing { padding-block: var(--space-9); background: var(--ink); color: var(--paper); text-align: center; }
+.lp-closing h2 { max-width: 18ch; margin: 0 auto var(--space-4); }
+.lp-closing p { max-width: 44ch; margin-inline: auto; color: var(--on-ink-2); }
+.lp-closing .lp-actions { justify-content: center; }
+.lp-closing .lp-call { background: var(--paper); border-color: var(--paper); color: var(--ink); }
+.lp-closing .lp-call:hover { background: var(--surface); border-color: var(--surface); }
+.lp-closing .lp-watch { color: var(--paper); }
+.lp-closing :focus-visible { outline-color: var(--paper); }
+.lp-foot {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2) var(--space-6);
+  padding-block: var(--space-6); font-size: var(--text-small); color: var(--ink-2);
+}
+
+@media (max-width: 960px) {
+  .lp-hero, .lp-steps, .lp-gets { grid-template-columns: minmax(0, 1fr); }
+  .lp-hero { gap: var(--space-7); padding-block: var(--space-4) var(--space-8); }
+  .lp-section, .lp-closing { padding-block: var(--space-8); }
+  .lp-steps { gap: var(--space-5); }
+  .lp-steps li { grid-template-columns: 56px minmax(0, 1fr); align-items: center; gap: var(--space-4); }
+  .lp-steps p { max-width: 40ch; font-size: 20px; }
+}
+@media (max-width: 640px) {
+  .lp-wordmark { font-size: 30px; }
+  .lp-nav { gap: var(--space-4); }
+  .lp-nav a { font-size: 17px; }
+  .lp-actions { flex-direction: column; align-items: stretch; margin-top: var(--space-6); }
+  .lp-call { padding-inline: 16px; font-size: clamp(15px, 4.6vw, 19px); }
+  .lp-watch { justify-content: center; }
+  .vg-panel { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); margin: calc(-1 * var(--space-6)) var(--space-3) 0; padding: var(--space-4); }
+  .lp-msg { padding: var(--space-5); }
+  .lp-msg blockquote p { font-size: 19px; }
+  .lp-steps li { grid-template-columns: 48px minmax(0, 1fr); }
+  .lp-step-icon { width: 48px; height: 48px; }
+}
+@media (max-width: 420px) {
+  .lp-nav-watch { display: none !important; } /* the hero's own "Watch it live" sits right below */
+  .lp-call .icon { display: none; }
+  .vg-pill { top: var(--space-3); left: var(--space-3); padding: 6px 14px 6px 12px; }
+}
+@media (max-width: 360px) {
+  .lp-call { padding-inline: 8px; font-size: 15px; letter-spacing: -0.01em; } /* keeps the one-line call button inside a 288px column */
+}
