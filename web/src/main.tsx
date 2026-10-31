@@ -3,14 +3,13 @@ import { createRoot } from "react-dom/client"
 import { MOCK, post } from "./api"
 import { CallPanel, useCall, type Call } from "./CallPanel"
 import { CareFeed } from "./CareFeed"
+import { Landing } from "./landing/Landing"
 import { useActor, type Conn } from "./live"
 import { countdown, medBadge, type ElderState } from "./state"
 import "./styles.css"
 
 const STATUS_LABEL = { ok: "OK", watch: "Watch", urgent: "Urgent" }
 const CONN_LABEL: Record<Conn, string> = { connecting: "Connecting", live: "Live", polling: "Polling", offline: "Server offline", mock: "Mock data" }
-const WEB =
-  "M120 0L-10 0M120 0L-0.1 49.7M120 0L28.1 91.9M120 0L70.3 120.1M120 0L120 130M92 0Q96.4 4.7 94.1 10.7Q100 13.4 100.2 19.8Q106.6 20 109.3 25.9Q115.3 23.6 120 28M68 0Q76.1 8.7 72 19.9Q82.8 24.8 83.2 36.8Q95.2 37.2 100.1 48Q111.3 43.9 120 52M42 0Q54.2 13.1 47.9 29.8Q64.2 37.3 64.8 55.2Q82.7 55.8 90.2 72.1Q106.9 65.8 120 78M16 0Q32.3 17.4 23.9 39.8Q45.6 49.7 46.5 73.5Q70.3 74.4 80.2 96.1Q102.6 87.7 120 104"
 
 function useNow() {
   const [now, setNow] = useState(Date.now())
@@ -26,13 +25,10 @@ function TopBar({ state, conn, now, children }: { state: ElderState; conn: Conn;
   const next = state.callState === "due" ? "Ringing" : state.callState === "in_progress" ? "On a call" : countdown(state.nextCheckInAt, Date.now()) // not the 1 s tick: a stale tick could flash 0:16 for a 15 s check-in
   return (
     <header className="top">
-      <svg className="cobweb" viewBox="0 0 120 120" aria-hidden="true">
-        <path d={WEB} />
-      </svg>
-      <div className="brand">
+      <a className="brand" href="/">
         <span className="logo">Unc</span>
         <span className="tagline">AI care team</span>
-      </div>
+      </a>
       {p ? (
         <section className="elder-card" aria-label="Elder status">
           <div className="ident">
@@ -53,7 +49,7 @@ function TopBar({ state, conn, now, children }: { state: ElderState; conn: Conn;
                 <li key={m.name}>
                   <span className="med-name">{m.name}</span>
                   <span className={`badge badge-${b}`}>
-                    {b === "taken" ? "✓ Taken" : b === "missed" ? `✕ Missed${m.missedCount > 1 ? ` ×${m.missedCount}` : ""}` : m.times.join(" · ")}
+                    {b === "taken" ? "Taken" : b === "missed" ? `Missed${m.missedCount > 1 ? ` ×${m.missedCount}` : ""}` : m.times.join(" · ")}
                   </span>
                 </li>
               )
@@ -65,7 +61,7 @@ function TopBar({ state, conn, now, children }: { state: ElderState; conn: Conn;
           </div>
         </section>
       ) : (
-        <section className="elder-card elder-empty">No elder loaded yet. Open Demo and press Reset demo.</section>
+        <section className="elder-card elder-empty">No elder loaded yet. Open Demo controls and press Reset demo.</section>
       )}
       <div className="top-right">
         <span className={`conn conn-${conn}`}>{CONN_LABEL[conn]}</span>
@@ -113,4 +109,7 @@ function App() {
   )
 }
 
-createRoot(document.getElementById("root")!).render(<App />)
+// No router library: "/live" is the demo dashboard, every other path the landing page (vercel.json rewrites all paths here).
+const live = location.pathname.replace(/\/+$/, "") === "/live"
+if (live) document.title = "Unc · Live demo"
+createRoot(document.getElementById("root")!).render(live ? <App /> : <Landing />)

@@ -96,14 +96,14 @@ The service role key bypasses RLS. Never put it in `web/`, in a `VITE_` variable
 - **`care-team/`**: the doctor agent reads `patients`, `prescriptions` and `clinical_notes` for triage. The pharmacy agent reads `refills_left`. The services may also write relay messages and timeline events to `care_events`.
 - **`web/`** does not talk to Supabase in the MVP. The live Care Feed comes from the ElderActor WebSocket.
 
-No SDK is needed. PostgREST over `fetch` works. Send the key in both headers; this works for both key types:
+No SDK is needed. PostgREST over `fetch` works. Send the key in the `apikey` header. Add `Authorization: Bearer <key>` only for a legacy JWT `service_role` key: Supabase rejects `sb_secret_…` keys as a Bearer token. The services do this through `supabaseAuth()`.
 
 ```sh
 curl "$SUPABASE_URL/rest/v1/prescriptions?patient_id=eq.grandpa-joe&select=name,dose,times,purpose,refills_left" \
-  -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY"
+  -H "apikey: $SUPABASE_SERVICE_ROLE_KEY"
 
 curl -X POST "$SUPABASE_URL/rest/v1/calls" \
-  -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+  -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
   -H "Content-Type: application/json" \
   -d '{"patient_id":"grandpa-joe","started_at":"2026-10-31T19:00:00Z","summary":"Dizzy, out of amlodipine","mood":"tired","transcript":[]}'
 ```

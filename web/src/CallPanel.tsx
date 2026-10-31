@@ -1,13 +1,37 @@
 import { useEffect, useRef, useState } from "react"
 import { post } from "./api"
-import { runScript } from "./script"
-import { mmss, type ElderState } from "./state"
-import { VoiceOffline, applyVoiceEvent, startMeter, startVoice, type Line } from "./voice"
+import { runScript, storyline } from "./script"
+import { mmss, type ElderState, type Tone } from "./state"
+import { VoiceOffline, applyVoiceEvent, functionCalls, startMeter, startVoice, type Line } from "./voice"
 
 export type Phase = "idle" | "connecting" | "voice" | "script"
 export type Call = ReturnType<typeof useCall>
+type Args = Record<string, unknown>
+export type Heard = { id: string; kind: "med" | "symptom" | "refill" | "teach_back" | "summary"; text: string; detail?: string; tone: Tone }
 
 const OFFLINE = "Voice offline — use Run scripted demo"
+const KIND_LABEL: Record<Heard["kind"], string> = { med: "Medication", symptom: "Symptom", refill: "Refill request", teach_back: "Teach-back", summary: "Summary" }
+
+/** One "What Unc heard" row per tool call: the facts the agent extracted, never the words. */
+export function heard(id: string, name: string, a: Args): Heard | null {
+  const s = (v: unknown) => (v == null ? "" : String(v).trim())
+  const note = s(a.note) || undefined
+  switch (name) {
+    case "confirm_medication":
+      return { id, kind: "med", text: `${s(a.med)} ${a.taken === true ? "taken" : "missed"}`, detail: note, tone: a.taken === true ? "good" : "bad" }
+    case "report_symptom": {
+      const sev = s(a.severity)
+      return { id, kind: "symptom", text: s(a.symptom), detail: sev ? `${sev} severity` : undefined, tone: sev === "high" ? "bad" : sev === "medium" ? "warn" : "neutral" }
+    }
+    case "request_refill":
+      return { id, kind: "refill", text: s(a.med), tone: "neutral" }
+    case "teach_back_result":
+      return { id, kind: "teach_back", text: `${s(a.med)}: ${a.understood === true ? "explained it right" : "mixed up, then corrected"}`, detail: note, tone: a.understood === true ? "good" : "warn" }
+    case "end_call":
+      return { id, kind: "summary", text: s(a.summary), detail: s(a.mood) ? `Mood: ${s(a.mood)}` : undefined, tone: "neutral" }
+  }
+  return null
+}
 
 export function useCall(state: ElderState) {
   const [phase, setPhase] = useState<Phase>("idle")
@@ -17,12 +41,14 @@ export function useCall(state: ElderState) {
   const [model, setModel] = useState("")
   const [startedAt, setStartedAt] = useState(0)
   const session = useRef<{ close: () => void } | null>(null)
+  const tools = useRef(new Map<string, [name: string, args: Args]>()) // tool line id → structured call: a Line only carries a display label
   const latest = useRef(state)
   latest.current = state
 
   const begin = (p: Phase) => {
     setNotice("")
     setLines([])
+    tools.current.clear()
     setStartedAt(Date.now())
     setPhase(p)
   }
@@ -38,7 +64,10 @@ export function useCall(state: ElderState) {
     if (session.current || phase === "connecting") return
     begin("connecting")
     try {
-      const s = await startVoice(latest.current, e => setLines(ls => applyVoiceEvent(ls, e)), onEnd)
+      const s = await startVoice(latest.current, e => {
+        for (const c of functionCalls(e)) tools.current.set(c.call_id, [c.name, c.args]) // applyVoiceEvent ids tool lines by call_id
+        setLines(ls => applyVoiceEvent(ls, e))
+      }, onEnd)
       session.current = s
       setStream(s.mic)
       setModel(s.model)
@@ -54,6 +83,7 @@ export function useCall(state: ElderState) {
   function startScript() {
     if (session.current || phase === "connecting") return
     begin("script")
+    for (const [i, step] of storyline(latest.current).entries()) if ("tool" in step) tools.current.set(`script-${i}`, step.tool) // runScript ids tool lines script-<step index>
     session.current = runScript(latest.current, setLines, onEnd)
   }
 
@@ -63,7 +93,12 @@ export function useCall(state: ElderState) {
     setLines([])
     setNotice("")
   }
-  return { phase, lines, notice, stream, model, startedAt, startVoiceCall, startScript, hangUp, clear }
+  const facts = lines.flatMap(l => {
+    const t = l.who === "tool" ? tools.current.get(l.id) : undefined
+    const h = t && heard(l.id, ...t)
+    return h ? [h] : []
+  })
+  return { phase, lines, heard: facts, notice, stream, model, startedAt, startVoiceCall, startScript, hangUp, clear }
 }
 
 const PHONE = "M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.61 21 3 13.39 3 4c0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"
@@ -77,13 +112,14 @@ export function CallPanel({ state, call, now }: { state: ElderState; call: Call;
   const first = state.profile?.name.split(" ")[0] ?? "Joe"
   const inCall = call.phase === "voice" || call.phase === "script"
   const last = call.lines.at(-1)
+  const showHeard = inCall || call.heard.length > 0
   const meter = useRef<HTMLDivElement>(null)
   const list = useRef<HTMLOListElement>(null)
 
   useEffect(() => (call.stream && meter.current ? startMeter(call.stream, meter.current) : undefined), [call.stream])
   useEffect(() => {
     list.current?.scrollTo({ top: list.current.scrollHeight, behavior: inCall ? "smooth" : "auto" }) // block body: scrollTo returns a Promise in new Chrome
-  }, [call.lines, inCall]) // inCall: the list shrinks when the call ends, keep its last line in view
+  }, [call.heard.length, inCall])
 
   let stage
   if (inCall) {
@@ -136,25 +172,30 @@ export function CallPanel({ state, call, now }: { state: ElderState; call: Call;
   }
 
   return (
-    <section className={`panel call${call.lines.length ? " has-lines" : ""}`} aria-label="Check-in call">
+    <section className={`panel call${showHeard ? " has-heard" : ""}`} aria-label="Check-in call">
       <header className="panel-head">
         <h2>Check-in call</h2>
         {inCall && <span className="live-tag">Live</span>}
       </header>
       {call.notice && <p className="notice" role="alert">{call.notice}</p>}
       {stage}
-      {call.lines.length > 0 && (
-        <>
-          {!inCall && <h3 className="sub">Last call</h3>}
-          <ol ref={list} className={`transcript${inCall ? "" : " dim"}`} aria-live="polite">
-            {call.lines.map(l => (
-              <li key={l.id} className={`line ${l.who}${l.final ? "" : " typing"}`}>
-                <span className="who">{l.who === "agent" ? "Unc" : l.who === "elder" ? first : "Tool call"}</span>
-                {l.text || "…"}
+      {showHeard && (
+        <section className="heard" aria-label="What Unc heard">
+          <div className="heard-head">
+            <h3 className="sub">{inCall ? "What Unc heard" : "Last call: what Unc heard"}</h3>
+            <span className="muted">Summaries only, no transcript</span>
+          </div>
+          <ol ref={list} className="heard-list" aria-live="polite">
+            {call.heard.length === 0 && <li className="empty">Meds, symptoms and teach-back results appear here as Unc hears them</li>}
+            {call.heard.map(h => (
+              <li key={h.id} className={`heard-item heard-${h.kind} tone-${h.tone} enter`}>
+                <span className="heard-kind">{KIND_LABEL[h.kind]}</span>
+                <span className="heard-text">{h.text}</span>
+                {h.detail && <span className="heard-detail">{h.detail}</span>}
               </li>
             ))}
           </ol>
-        </>
+        </section>
       )}
     </section>
   )

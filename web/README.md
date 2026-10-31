@@ -16,7 +16,7 @@ A single-screen Vite + React + TypeScript app on **:5173**. It is the split view
   - Idle: a **Start check-in** button.
   - Ringing: when the actor broadcasts `call_due` or `callState` is `"due"`, it shows "Incoming check-in call for Grandpa Joe" and an **Answer** button. The click is the user gesture the browser needs for the mic and audio.
   - Connecting.
-  - In a call: live transcript bubbles for Unc and Joe, a row for each tool call, a mic level meter and **Hang up**.
+  - In a call: a live "What Unc heard" list (meds, symptoms, refills, teach-back, summary), a mic level meter and **Hang up**. No transcript is shown on screen (summaries only, a product decision); the voice transcript reducer still runs in `voice.ts`.
 - **Right, the Care Feed:** three lanes for Doctor, Pharmacy and Family. They hold `agent_msg` events grouped by `data.lane`, newest on top, and new cards animate in. Under the lanes, the **Agent thread** lists every `agent_msg` in order, as from → to. Above the lanes, the `med`, `symptom`, `teach_back`, `vitals` and `status` events show as color-coded chips.
 - **Demo controls** (top right, collapsible): Reset demo, Check-in in 15 s, Simulate vitals spike, Run scripted demo.
 
