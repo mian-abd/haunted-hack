@@ -1,4 +1,9 @@
 import { test, expect, beforeAll } from "bun:test"
+
+// Tests never touch the real database or OpenAI, even when care-team/.env (which bun test loads) has the keys.
+delete process.env.SUPABASE_URL
+delete process.env.SUPABASE_SERVICE_ROLE_KEY
+delete process.env.OPENAI_API_KEY
 import { localRelay } from "./relay"
 import { fakeActor } from "./actor"
 import { startCareTeam, invalid, channelFor } from "./flow"

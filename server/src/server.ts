@@ -1,6 +1,8 @@
 // server/: HTTP API from PLAN.md. Bun.serve on :8787, no framework.
 import { elder, isFake, prepareWebsocket, type Med, type Profile } from "./actor"
 import { callMode, dial, startAutoDial, webhook } from "./elevenlabs"
+import { archiveCall, archiveEvent, recordFor } from "./store"
+export { supabaseAuth } from "./store"
 
 const ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 const REALTIME_MODEL = "gpt-realtime-2.1" // OpenAI's recommended realtime model for voice agents with tools (Oct 2026)
@@ -31,6 +33,7 @@ const routes: Record<string, (elderId: string, b: Body) => Promise<unknown>> = {
     const details = { heartRate: b.heartRate, note: b.note }
     const text = `Heart rate ${b.heartRate} bpm${b.note ? ` (${b.note})` : ""}`
     await elder(id).logEvent({ kind: "vitals", text, from: "system", data: details })
+    void archiveEvent(id, { kind: "vitals", text, from: "system", data: details })
     escalate({ elderId: id, kind: "vitals", reason: text, details })
     return OK
   },
@@ -76,12 +79,14 @@ async function runTool(elderId: string, name: string, a: Body): Promise<string> 
     case "confirm_medication": {
       const med = need(a.med, "med"), taken = flag(a.taken, "taken")
       await actor.recordMed(med, taken, a.note)
+      void archiveEvent(elderId, { kind: "med", from: "elder", text: `${med}: ${taken ? "taken" : "not taken"}${a.note ? ` (${a.note})` : ""}`, data: { med, taken, note: a.note ?? null } })
       return `Logged: ${med} ${taken ? "taken" : "missed"}.`
     }
     case "report_symptom": {
       const symptom = need(a.symptom, "symptom"), severity = a.severity
       if (!["low", "medium", "high"].includes(severity)) bad("severity must be low, medium or high")
       await actor.logEvent({ kind: "symptom", text: symptom, from: "elder", data: { severity } })
+      void archiveEvent(elderId, { kind: "symptom", text: symptom, from: "elder", data: { severity } })
       if (severity === "low") return `Logged symptom: ${symptom} (low).`
       escalate({ elderId, kind: "symptom", reason: symptom, details: { severity } })
       return `Logged symptom: ${symptom} (${severity}). Care team notified.`
@@ -89,7 +94,9 @@ async function runTool(elderId: string, name: string, a: Body): Promise<string> 
     case "teach_back_result": {
       const med = need(a.med, "med"), understood = flag(a.understood, "understood")
       const note = a.note ? ` (${a.note})` : ""
-      await actor.logEvent({ kind: "teach_back", text: `${med}: ${understood ? "understood" : "not understood"}${note}`, from: "elder", data: { med, understood, note: a.note } })
+      const ev = { kind: "teach_back" as const, text: `${med}: ${understood ? "understood" : "not understood"}${note}`, from: "elder" as const, data: { med, understood, note: a.note } }
+      await actor.logEvent(ev)
+      void archiveEvent(elderId, ev)
       if (understood) return `Logged: teach-back for ${med} understood.`
       // One path to the family lane: the care team's family agent over Agent Relay (no second server-written note).
       escalate({ elderId, kind: "teach_back", reason: `Teach-back not understood: ${med}${note}`, details: { med, note: a.note } })
@@ -97,6 +104,7 @@ async function runTool(elderId: string, name: string, a: Body): Promise<string> 
     }
     case "request_refill": {
       const med = need(a.med, "med")
+      void archiveEvent(elderId, { kind: "note", from: "elder", text: `Refill requested: ${med}`, data: { med, refill: true } })
       escalate({ elderId, kind: "refill", reason: `Refill needed: ${med}`, details: { med } })
       return `Refill request sent to the pharmacy for ${med}.`
     }
@@ -124,31 +132,18 @@ function escalate(body: { elderId: string; kind: EscalationKind; reason: string;
     .catch(e => console.warn(`[escalate] ${body.kind}: care-team call failed (${e?.message ?? e}), continuing`))
 }
 
+// Archives to Supabase (calls + care_events) when it is configured; started_at comes from the timeline's call_started.
 async function endCall(elderId: string, summary: string, mood?: string) {
-  await elder(elderId).endCall(summary, mood)
-  archive(elderId, summary, mood)
+  const actor = elder(elderId)
+  const startedAt = (await actor.getState()).timeline.findLast(e => e.kind === "call_started")?.ts ?? null
+  await actor.endCall(summary, mood)
+  void archiveCall(elderId, summary, mood, startedAt)
 }
 
-// PostgREST auth. A legacy service_role key is a JWT: apikey + Authorization: Bearer. A new sb_secret_ key is not a JWT,
-// and Supabase rejects it as a Bearer token ("API keys" docs, Known limitations): apikey only.
-export const supabaseAuth = (key: string): Record<string, string> =>
-  key.split(".").length === 3 ? { apikey: key, Authorization: `Bearer ${key}` } : { apikey: key }
-
-// Archive to Supabase only when both env vars are set. The service key stays on the server.
-function archive(elderId: string, summary: string, mood?: string) {
-  const { SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: key } = process.env
-  if (!url || !key) return
-  const headers = { ...supabaseAuth(key), "Content-Type": "application/json", Prefer: "return=minimal" }
-  const insert = (table: string, row: Body) =>
-    fetch(`${url}/rest/v1/${table}`, { method: "POST", headers, body: JSON.stringify(row), signal: AbortSignal.timeout(5000) })
-      .then(async r => { if (!r.ok) console.warn(`[supabase] ${table} insert failed ${r.status}: ${await r.text()}`) })
-      .catch(e => console.warn(`[supabase] ${table} insert failed: ${e?.message ?? e}`))
-  // Columns from supabase/migrations/20261031120000_init.sql.
-  insert("calls", { patient_id: elderId, summary, mood: mood ?? null })
-  insert("care_events", { patient_id: elderId, kind: "call_ended", from_agent: "system", text: summary, data: { mood: mood ?? null } })
-}
-
+// Supabase first (the hospital record), seed.json when Supabase is unset or unreachable.
 async function seedFor(elderId: string): Promise<[Profile, Med[]]> {
+  const fromDb = await recordFor(elderId)
+  if (fromDb) return fromDb
   const seed = await Bun.file(SEED).json()
   const p = seed.patients.find((x: Body) => x.id === elderId) ?? bad(`no patient "${elderId}" in supabase/seed.json`)
   const profile: Profile = { name: p.name, age: p.age, conditions: p.conditions, family: { name: p.family_name, relation: p.family_relation, phone: p.family_phone ?? undefined } }

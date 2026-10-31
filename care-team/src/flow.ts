@@ -3,7 +3,7 @@
 // pharmacy confirms the refill -> family agent drafts the family text. Every message is mirrored to the actor (the Care Feed).
 import type { Agent, Relay } from "./relay"
 import type { ActorBridge } from "./actor"
-import { loadRecord } from "./records"
+import { loadRecord, saveCareEvent } from "./records"
 import { bare, caseNote, clip, triage, refillNote, familyText, type Urgency } from "./brain"
 
 export const KINDS = ["symptom", "refill", "vitals", "summary", "teach_back"] as const
@@ -34,9 +34,9 @@ export function startCareTeam(relay: Relay, actor: ActorBridge, records = loadRe
     const channel = channelFor(data.elderId)
     const msg = dmTo ? await relay.dm(from, dmTo, text, data) : await relay.post(from, channel, text, data)
     console.log(`[relay] ${msg.id} ${msg.ts} ${from} -> ${dmTo ? `@${dmTo}` : `#${channel}`}: ${text}`)
-    await actor
-      .logEvent(data.elderId, { kind: "agent_msg", from, to, text, data: { ...data, lane, relay: relay.mode, relayId: msg.id, relayTs: msg.ts, via: dmTo ? "dm" : channel } })
-      .catch((e) => console.warn(`[actor] logEvent failed: ${(e as Error).message}`))
+    const event = { kind: "agent_msg" as const, from, to, text, data: { ...data, lane, relay: relay.mode, relayId: msg.id, relayTs: msg.ts, via: dmTo ? "dm" : channel } }
+    await actor.logEvent(data.elderId, event).catch((e) => console.warn(`[actor] logEvent failed: ${(e as Error).message}`))
+    void saveCareEvent(data.elderId, event)
   }
 
   const owner = (kind: Escalation["kind"]): Lane => (kind === "refill" ? "pharmacy" : kind === "summary" || kind === "teach_back" ? "family" : "doctor")

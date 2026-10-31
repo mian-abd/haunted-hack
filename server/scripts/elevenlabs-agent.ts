@@ -19,7 +19,7 @@ if (!key || !publicUrl || !toolSecret) {
 }
 
 async function api(method: string, path: string, body?: unknown): Promise<any> {
-  const r = await fetch(`${API}${path}`, {
+  const r = await fetch(path.startsWith("/v1/") ? `https://api.elevenlabs.io${path}` : `${API}${path}`, { // "/v1/..." = outside convai
     method,
     headers: { "xi-api-key": key, "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -142,10 +142,43 @@ async function upsertAgent(toolIds: string[]): Promise<string> {
   return created.agent_id
 }
 
+// server/.env is git-ignored: the script keeps the agent id and the webhook secret there, so nobody copies them by hand.
+const ENV_FILE = new URL("../.env", import.meta.url)
+async function setEnv(name: string, value: string) {
+  const file = Bun.file(ENV_FILE)
+  const lines = (await file.exists() ? await file.text() : "").split(/\r?\n/).filter(l => l && !l.startsWith(`${name}=`))
+  await Bun.write(ENV_FILE, [...lines, `${name}=${value}`].join("\n") + "\n")
+}
+
+// Post-call webhook (transcript + calls that never connected) → /api/el/post-call. ElevenLabs can't change a webhook's
+// URL and shows its secret only once, so each new PUBLIC_URL gets a new webhook; the old ones are removed afterwards.
+const HOOK_NAME = "Unc post-call"
+async function postCallWebhook(agentId: string) {
+  const url = `${publicUrl}/api/el/post-call`
+  const root = (method: string, path: string, body?: unknown) => api(method, `/v1/workspace/webhooks${path}`, body)
+  const { webhooks = [] } = await root("GET", "")
+  const ours = webhooks.filter((w: any) => w.name === HOOK_NAME)
+  let id = ours.find((w: any) => w.webhook_url === url && !w.is_disabled)?.webhook_id
+  if (id && env("ELEVENLABS_WEBHOOK_SECRET")) {
+    console.log(`post-call webhook already points at ${url}`)
+  } else {
+    const created = await root("POST", "", { settings: { auth_type: "hmac", name: HOOK_NAME, webhook_url: url } })
+    id = created.webhook_id
+    await setEnv("ELEVENLABS_WEBHOOK_SECRET", created.webhook_secret)
+    console.log(`created post-call webhook -> ${url} (secret saved to server/.env)`)
+  }
+  await api("PATCH", `/agents/${agentId}`, {
+    platform_settings: { workspace_overrides: { webhooks: { post_call_webhook_id: id, events: ["transcript", "call_initiation_failure"] } } },
+  })
+  for (const w of ours) if (w.webhook_id !== id) await root("DELETE", `/${w.webhook_id}`).catch(e => console.warn(`could not delete old webhook: ${e.message}`))
+}
+
 const agentId = await upsertAgent(await upsertTools(await secretId()))
+await setEnv("ELEVENLABS_AGENT_ID", agentId)
+await postCallWebhook(agentId)
 const phone = env("ELEVENLABS_PHONE_NUMBER_ID")
 if (phone) {
   await api("PATCH", `/phone-numbers/${phone}`, { agent_id: agentId })
   console.log(`phone number ${phone} now rings agent ${agentId}`)
 }
-console.log(`\nPut this in server/.env:\nELEVENLABS_AGENT_ID=${agentId}`)
+console.log(`\nserver/.env has ELEVENLABS_AGENT_ID=${agentId}. Restart the server so it reads the new values.`)

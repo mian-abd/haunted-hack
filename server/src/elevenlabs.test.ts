@@ -17,6 +17,9 @@ let elevenLabs = () => Response.json({ success: true, message: "ok", conversatio
 
 beforeEach(async () => {
   calls = []
+  delete process.env.SUPABASE_URL // bun test loads server/.env: never the real database here
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY
+  delete process.env.AUTO_DIAL
   elevenLabs = () => Response.json({ success: true, message: "ok", conversation_id: "conv_1", callSid: "CA1" })
   Object.assign(process.env, {
     ELEVENLABS_API_KEY: "xi-test", ELEVENLABS_AGENT_ID: "agent_test", ELEVENLABS_PHONE_NUMBER_ID: "phnum_test",
@@ -168,4 +171,12 @@ test("call mode tells web/ whether Start check-in rings the phone", async () => 
   delete process.env.AUTO_DIAL
   delete process.env.ELDER_PHONE
   expect(await mode()).toEqual({ phone: false, autoDial: false })
+})
+
+test("a recheck call tells the agent it is a follow-up", async () => {
+  const { elderContext } = await import("./elevenlabs")
+  const s = await elder(ID).getState()
+  expect(elderContext(s)).not.toContain("follow-up")
+  await elder(ID).setStatus("watch", "Dizzy after missing Amlodipine")
+  expect(elderContext(await elder(ID).getState())).toContain("This is a follow-up call")
 })

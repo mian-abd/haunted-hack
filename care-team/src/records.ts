@@ -14,6 +14,22 @@ const SEED = new URL("../../supabase/seed.json", import.meta.url)
 export const supabaseAuth = (key: string): Record<string, string> =>
   key.split(".").length === 3 ? { apikey: key, Authorization: `Bearer ${key}` } : { apikey: key }
 
+// Care team history: every relay message also lands in Supabase care_events, next to the server's timeline events.
+// Fire-and-forget, and skipped when Supabase is not configured.
+export function saveCareEvent(elderId: string, e: { kind: string; from?: string; to?: string; text: string; data?: Record<string, unknown> }): Promise<void> {
+  const url = process.env.SUPABASE_URL?.replace(/\/+$/, "")
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return Promise.resolve()
+  return fetch(`${url}/rest/v1/care_events`, {
+    method: "POST",
+    headers: { ...supabaseAuth(key), "Content-Type": "application/json", Prefer: "return=minimal" },
+    body: JSON.stringify({ patient_id: elderId, kind: e.kind, from_agent: e.from ?? null, to_agent: e.to ?? null, text: e.text, data: e.data ?? null }),
+    signal: AbortSignal.timeout(5_000),
+  })
+    .then(async (r) => { if (!r.ok) console.warn(`[records] care_events insert failed ${r.status}: ${(await r.text()).slice(0, 200)}`) })
+    .catch((err) => console.warn(`[records] care_events insert failed: ${(err as Error).message}`))
+}
+
 export async function loadRecord(elderId: string): Promise<HospitalRecord> {
   const url = process.env.SUPABASE_URL?.replace(/\/+$/, "")
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY

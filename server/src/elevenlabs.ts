@@ -3,6 +3,7 @@
 // webhooks and its post-call webhook, and (AUTO_DIAL=1) dials whenever the actor's alarm makes a call due.
 import { createHmac, timingSafeEqual } from "node:crypto"
 import { elder, type ElderState } from "./actor"
+import { archiveTranscript } from "./store"
 
 type Body = Record<string, any>
 export type Deps = {
@@ -27,6 +28,7 @@ export function elderContext(s: ElderState): string {
     `You are calling ${p ? `${p.name}, age ${p.age}` : "an older adult"}. Call them ${first}.`,
     p && `Conditions: ${p.conditions.join(", ")}. Family contact: ${p.family.name} (${p.family.relation}).`,
     `Current status: ${s.status}${s.statusReason ? `, because: ${s.statusReason}` : ""}.`,
+    s.status !== "ok" && `This is a follow-up call the care team asked for. Early on, ask whether that is better, the same or worse, and call report_symptom if it is not better.`,
     meds.length && `Medicines due today:\n${meds.join("\n")}`,
     teach && `Teach-back medicine: ${teach.name}.`,
   ].filter(Boolean).join("\n")
@@ -117,6 +119,7 @@ async function postCall(req: Request, raw: string, deps: Deps): Promise<Response
     await actor.logEvent({ kind: "note", from: "system", text: summary, data: { conversationId: d.conversation_id ?? null } })
   }
   if (summary && (await actor.getState()).callState === "in_progress") await deps.endCall(elderId, summary)
+  if (ev.type === "post_call_transcription") await archiveTranscript(elderId, summary!, Array.isArray(d.transcript) ? d.transcript : [], d.conversation_id ?? null)
   return Response.json({ ok: true })
 }
 
