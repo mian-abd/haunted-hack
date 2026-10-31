@@ -17,8 +17,8 @@ Contract: `PLAN.md`, sections "`server/` HTTP API" and "Voice-agent tools". Code
 
 Behavior the contract leaves open:
 
-- `teach_back_result` with `understood: false` logs the `teach_back` event, then a `note` event with
-  `data.lane: "family"`, then escalates `kind: "teach_back"`. The family lane gets the note even when the care team is down.
+- `teach_back_result` with `understood: false` logs the `teach_back` event, then escalates `kind: "teach_back"`. The family
+  lane gets exactly one message for it, from the care team's family agent over Agent Relay (the server writes no lane item).
 - Errors are `{ error, output: "Error: ..." }` with status 400 (bad input) or 500. The `output` field means the voice model
   always gets a string from `/api/tool`.
 - `/api/tool` accepts `args` as an object or as the JSON string that the Realtime data channel sends.
@@ -101,14 +101,16 @@ Voice tools (`POST /api/tool`):
 |---|---|---|---|
 | `confirm_medication { med, taken, note? }` | `recordMed` | none | `Logged: Metformin taken.` |
 | `report_symptom { symptom, severity }` | `logEvent` `symptom` | `symptom` when severity is medium or high | `Logged symptom: dizzy (medium). Care team notified.` |
-| `teach_back_result { med, understood, note? }` | `logEvent` `teach_back` (+ family-lane `note` if not understood) | `teach_back` if not understood | `Logged: teach-back for Metformin not understood. Family notified.` |
+| `teach_back_result { med, understood, note? }` | `logEvent` `teach_back` | `teach_back` if not understood | `Logged: teach-back for Metformin not understood. Family notified.` |
 | `request_refill { med }` | none | `refill` | `Refill request sent to the pharmacy for Amlodipine.` |
 | `end_call { summary, mood }` | `endCall` + Supabase archive | `summary` | `Call ended. Summary sent to the family.` |
 
 Escalations are fire-and-forget POSTs with a 2 s timeout. A failure is logged as
 `[escalate] <kind>: care-team call failed (...), continuing`, and the tool still answers.
 
-The Supabase archive is a PostgREST insert with the `apikey` and `Authorization: Bearer` headers. It writes
+The Supabase archive is a PostgREST insert. It always sends `apikey`, and adds `Authorization: Bearer` only when the key is a
+legacy JWT `service_role` key: a new `sb_secret_...` key is not a JWT, and Supabase rejects it as a Bearer token (`supabaseAuth`
+in `src/server.ts`, unit-tested). It writes
 `calls { patient_id, summary, mood }` and `care_events { patient_id, kind: "call_ended", from_agent: "system", text, data: { mood } }`.
 Columns follow `supabase/migrations/20261031120000_init.sql`. The archive is also fire-and-forget.
 
@@ -133,8 +135,8 @@ Columns follow `supabase/migrations/20261031120000_init.sql`. The archive is als
 
 ## Known gaps
 
-- `/api/realtime-token` has not been called against live OpenAI (no key here). The endpoint and body shape come from the
-  OpenAI API reference (Oct 2026), and the stubbed test checks them.
+- `/api/realtime-token` verified against live OpenAI on Oct 31: it returns an `ek_` key with `model: "gpt-realtime-2.1"`, and a
+  headless Chrome call with that key reached `connected`, `session.updated` and `response.done` (see the root README).
 - The Supabase archive has not been run against a real project (no credentials here). `calls.started_at` and
   `calls.transcript` stay empty.
 - The `end_call` tool and `POST /api/call/end` both end the call. Calling both for one call logs two `call_ended` events

@@ -87,7 +87,7 @@ async function runTool(elderId: string, name: string, a: Body): Promise<string> 
       const note = a.note ? ` (${a.note})` : ""
       await actor.logEvent({ kind: "teach_back", text: `${med}: ${understood ? "understood" : "not understood"}${note}`, from: "elder", data: { med, understood, note: a.note } })
       if (understood) return `Logged: teach-back for ${med} understood.`
-      await actor.logEvent({ kind: "note", text: `Teach-back missed for ${med}${note}`, from: "system", to: "family", data: { lane: "family", med } })
+      // One path to the family lane: the care team's family agent over Agent Relay (no second server-written note).
       escalate({ elderId, kind: "teach_back", reason: `Teach-back not understood: ${med}${note}`, details: { med, note: a.note } })
       return `Logged: teach-back for ${med} not understood. Family notified.`
     }
@@ -125,11 +125,16 @@ async function endCall(elderId: string, summary: string, mood?: string) {
   archive(elderId, summary, mood)
 }
 
+// PostgREST auth. A legacy service_role key is a JWT: apikey + Authorization: Bearer. A new sb_secret_ key is not a JWT,
+// and Supabase rejects it as a Bearer token ("API keys" docs, Known limitations): apikey only.
+export const supabaseAuth = (key: string): Record<string, string> =>
+  key.split(".").length === 3 ? { apikey: key, Authorization: `Bearer ${key}` } : { apikey: key }
+
 // Archive to Supabase only when both env vars are set. The service key stays on the server.
 function archive(elderId: string, summary: string, mood?: string) {
   const { SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: key } = process.env
   if (!url || !key) return
-  const headers = { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" }
+  const headers = { ...supabaseAuth(key), "Content-Type": "application/json", Prefer: "return=minimal" }
   const insert = (table: string, row: Body) =>
     fetch(`${url}/rest/v1/${table}`, { method: "POST", headers, body: JSON.stringify(row), signal: AbortSignal.timeout(5000) })
       .then(async r => { if (!r.ok) console.warn(`[supabase] ${table} insert failed ${r.status}: ${await r.text()}`) })
