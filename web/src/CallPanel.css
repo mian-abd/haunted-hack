@@ -1,0 +1,73 @@
+/* The call card inside the status band, and "What Troska heard". */
+/* No box inside the band: a hairline separates the action from the verdict. */
+.cp-action {
+  display: grid; gap: var(--space-3); min-width: 0; align-content: start;
+  padding-top: var(--space-5); border-top: 1px solid color-mix(in srgb, var(--tone, var(--ink)) 22%, transparent);
+}
+@media (min-width: 1100px) {
+  .cp-action { padding: 0 0 0 var(--space-6); border-top: 0; border-left: 1px solid color-mix(in srgb, var(--tone, var(--ink)) 22%, transparent); }
+}
+.cp-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); font-size: 28px; }
+.cp-body { max-width: var(--measure); color: var(--ink-2); overflow-wrap: anywhere; }
+.cp-recap { color: var(--ink); }
+.cp-actions { display: grid; gap: var(--space-3); margin-top: var(--space-2); }
+.cp-call { width: 100%; min-height: 68px; padding: 16px 28px; font-size: 22px; justify-content: center; }
+.cp-call .icon { width: 24px; height: 24px; }
+.cp-call:disabled { opacity: 0.55; cursor: not-allowed; }
+.cp-note { color: var(--ink-2); font-size: var(--text-small); max-width: 46ch; }
+.cp-notice { padding: var(--space-3) var(--space-4); border-radius: 12px; background: var(--urgent-bg); color: var(--urgent); }
+.cp-link { padding: 0; border: 0; background: none; font: inherit; text-align: left; font-weight: 700; color: var(--ink); text-decoration: underline; text-underline-offset: 0.2em; cursor: pointer; }
+.cp-link:hover { text-decoration-thickness: 2px; }
+
+.cp-live {
+  display: inline-flex; align-items: center; gap: var(--space-2); padding: 3px 12px;
+  border-radius: var(--radius-pill); background: var(--ink); color: var(--surface);
+  font: 700 var(--text-small) / 1.5 var(--font-body); letter-spacing: 0;
+}
+.cp-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--lv-accent, #E8743B); animation: lv-breathe 1.2s var(--lv-ease) infinite alternate; }
+
+/* Calling: a soft halo rings out from the phone. */
+.cp-ring {
+  position: relative; isolation: isolate; display: grid; place-items: center; width: 64px; height: 64px; margin: var(--space-3) 0 var(--space-2) var(--space-2);
+  border-radius: 50%; background: var(--ink); color: var(--surface);
+}
+.cp-ring .icon { width: 26px; height: 26px; }
+.cp-ring::before, .cp-ring::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 50%;
+  background: var(--lv-accent, #E8743B); opacity: 0; animation: cp-halo 2.2s var(--lv-ease) infinite;
+}
+.cp-ring::after { animation-delay: 1.1s; }
+@keyframes cp-halo { from { opacity: 0.5; transform: scale(1); } to { opacity: 0; transform: scale(2.2); } }
+
+/* On the phone: voice bars and a running timer. */
+.cp-talk { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); }
+.cp-bars { display: inline-flex; align-items: center; gap: 5px; height: 36px; }
+.cp-bars i { width: 6px; height: 100%; border-radius: 3px; background: var(--lv-accent, #E8743B); transform: scaleY(0.6); animation: cp-voice 0.9s var(--lv-ease) infinite alternate; }
+.cp-bars i:nth-child(2) { animation-delay: -0.35s; }
+.cp-bars i:nth-child(3) { animation-delay: -0.7s; }
+.cp-bars i:nth-child(4) { animation-delay: -0.2s; }
+.cp-bars i:nth-child(5) { animation-delay: -0.55s; }
+@keyframes cp-voice { from { transform: scaleY(0.2); } to { transform: scaleY(1); } }
+.cp-timer { font: 700 30px / 1 var(--font-body); font-variant-numeric: tabular-nums; color: var(--ink); }
+.cp-meter { display: inline-block; width: 96px; height: 8px; border-radius: var(--radius-pill); background: var(--surface-2); overflow: hidden; }
+.cp-meter span { display: block; height: 100%; width: calc(var(--level, 0) * 100%); background: var(--ok); }
+
+/* What Troska heard: newest first, each new fact slides in from above. */
+.cp-sub { margin-top: var(--space-2); color: var(--ink-2); font-size: var(--text-small); }
+.cp-list { margin-top: var(--space-4); }
+.cp-row {
+  display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: var(--space-3); padding: var(--space-4) 0; border-top: 1px solid var(--line);
+  animation: cp-in 600ms var(--lv-ease) both;
+}
+.cp-row p { overflow-wrap: anywhere; }
+.cp-row-icon { width: 24px; height: 24px; margin-top: 3px; color: var(--ink-2); }
+.tone-good .cp-row-icon { color: var(--ok); }
+.tone-warn .cp-row-icon { color: var(--attention); }
+.tone-bad .cp-row-icon { color: var(--urgent); }
+.cp-detail { color: var(--ink-2); font-size: var(--text-small); }
+@keyframes cp-in { from { opacity: 0; transform: translateY(-12px); } }
+
+/* Warm empty state: a quiet line drawing and the next step. */
+.cp-empty { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: var(--space-4); align-items: start; margin-top: var(--space-4); }
+.cp-empty-art { width: 56px; height: 56px; color: var(--ink-2); }
+.cp-waves { stroke: var(--lv-accent, #E8743B); animation: lv-breathe 1.6s var(--lv-ease) infinite alternate; transform-origin: 38px 26px; }
