@@ -1,7 +1,7 @@
 // Voice agent: OpenAI Realtime (GA) over WebRTC with the 5 PLAN.md tools, executed by server/ via POST /api/tool.
 // Verified against developers.openai.com/api/docs/guides/voice-webrtc (ephemeral-key flow) and the realtime
 // client/server event references: SDP goes to /v1/realtime/calls as application/sdp, events use the "oai-events" channel.
-import { MOCK, SERVER, post } from "./api"
+import { MOCK, SERVER, authHeaders, post } from "./api"
 import type { ElderState } from "./state"
 
 export type Who = "elder" | "agent" | "tool"
@@ -19,7 +19,7 @@ const fn = (name: string, description: string, properties: Json, required: strin
 
 export const TOOLS = [
   fn("confirm_medication", "Record whether the elder took one of their medicines today. Call once per medicine.",
-    { med: str("Medicine name as listed"), taken: { type: "boolean" }, note: str("Anything they said about it, e.g. ran out") }, ["med", "taken"]),
+    { med: str("Exact medicine name, e.g. Amlodipine (no dose or time)"), taken: { type: "boolean" }, note: str("Anything they said about it, e.g. ran out") }, ["med", "taken"]),
   fn("report_symptom", "Log a symptom the elder mentions. Use severity high for danger signs.",
     { symptom: str("The symptom, in their words"), severity: { type: "string", enum: ["low", "medium", "high"] } }, ["symptom", "severity"]),
   fn("teach_back_result", "Record whether the elder explained correctly, in their own words, when and how they take a medicine.",
@@ -29,18 +29,19 @@ export const TOOLS = [
     { summary: str("2-3 sentences for the family and the doctor"), mood: str("Their mood, in a few words") }, ["summary", "mood"]),
 ]
 
-export function buildInstructions(s: ElderState): string {
+export function buildInstructions(s: ElderState, now = new Date()): string {
   const p = s.profile
   const first = p?.name.split(" ")[0] ?? "there"
   const teach = s.meds.find(m => m.times.length > 1) ?? s.meds[0]
   const meds = s.meds.map(m =>
-    `- ${m.name} ${m.dose} at ${m.times.join(" and ")}, for ${m.purpose}${m.missedCount ? ` (missed ${m.missedCount} time(s) recently)` : ""}`)
+    `- ${m.name}: ${m.dose} at ${m.times.join(" and ")}, for ${m.purpose}${m.missedCount ? ` (missed ${m.missedCount} time(s) recently)` : ""}`)
+  const time = [now.getHours(), now.getMinutes()].map(n => String(n).padStart(2, "0")).join(":") // same 24 h form as the dose times
   return [
     `You are Unc, a warm care companion on a scheduled check-in call with ${p ? `${p.name}, age ${p.age}` : "an older adult"}. Call them ${first}.`,
     p && `Conditions: ${p.conditions.join(", ")}. Family contact: ${p.family.name} (${p.family.relation}).`,
     `Current status: ${s.status}${s.statusReason ? `, because: ${s.statusReason}` : ""}.`,
-    `Style: be warm and speak slowly. Use short sentences. Ask one question at a time, then wait for the answer. Start by greeting ${first} by name and asking how they feel today.`,
-    meds.length && `Medicines due today:\n${meds.join("\n")}\nGo through each medicine in turn. Confirm whether they took it, and call confirm_medication for each one.`,
+    `Style: be warm and speak slowly. Use short sentences. Ask one question at a time, then wait for the answer. Start by greeting ${first} by name, go through the medicines first, then ask how they feel today.`,
+    meds.length && `Current local time: ${time}. Medicines today:\n${meds.join("\n")}\nAsk only about doses whose time has passed, one at a time. Confirm whether they took it, and call confirm_medication with the exact medicine name (e.g. ${s.meds[0]!.name}). Never call confirm_medication for a dose that is due later today.`,
     teach && `Teach-back: ask ${first} to explain in their own words when and how they take ${teach.name}. If they get it wrong, gently correct them and have them say it back. Then call teach_back_result (understood = whether they had it right the first time).`,
     "When they mention any symptom, call report_symptom. If they are out of a medicine or running low, offer a refill and call request_refill.",
     "To finish: give a short summary of what you heard and what happens next, then call end_call.",
@@ -119,7 +120,7 @@ const debug = (...a: unknown[]) => DEBUG && console.info("[realtime]", ...a)
 /** Connects a live call. onEnd fires once, with agentEnded = true when the agent's end_call already closed the call. */
 export async function startVoice(state: ElderState, onEvent: (e: ServerEvent) => void, onEnd: (agentEnded: boolean) => void): Promise<VoiceSession> {
   if (MOCK) throw new VoiceOffline("mock mode")
-  const tok = await fetch(`${SERVER}/api/realtime-token`)
+  const tok = await fetch(`${SERVER}/api/realtime-token`, { headers: authHeaders() })
   if (tok.status === 503) throw new VoiceOffline("no OpenAI key on the server")
   if (!tok.ok) throw new Error(`realtime-token returned ${tok.status}`)
   const { value, model } = await tok.json()
@@ -167,7 +168,8 @@ export async function startVoice(state: ElderState, onEvent: (e: ServerEvent) =>
     const calls = functionCalls(e)
     if (!calls.length) return
     for (const c of calls) {
-      const res = await post("/api/tool", { name: c.name, args: c.args }).catch((err: Error) => ({ output: `Tool failed: ${err.message}` }))
+      const res = await post("/api/tool", { name: c.name, args: c.args })
+        .catch((err: Error & { body?: { output?: string } }) => ({ output: err.body?.output ?? `Tool failed: ${err.message}` })) // a 400 carries a readable output the model can correct from
       send({ type: "conversation.item.create", item: { type: "function_call_output", call_id: c.call_id, output: String(res?.output ?? "ok") } })
       if (c.name === "end_call") {
         agentEnded = true

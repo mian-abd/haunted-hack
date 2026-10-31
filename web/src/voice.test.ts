@@ -16,6 +16,15 @@ test("session.update: GA realtime shape, the 5 contract tools, transcription, in
   for (const s of ["Joe", "Amlodipine", "Metformin", "Atorvastatin", "Dizzy earlier", "Teach-back", "911", "end_call", "report_symptom"])
     expect(session.instructions).toContain(s)
   expect(session.instructions).toContain("how they take Metformin") // teach-back picks the twice-a-day med
+  expect(session.tools.find(t => t.name === "confirm_medication")!.parameters.properties.med).toMatchObject({ description: expect.stringContaining("Exact medicine name") })
+})
+
+test("instructions carry the local time so the agent skips doses that are due later", async () => {
+  const { buildInstructions } = await import("./voice")
+  const text = buildInstructions(joe, new Date(2026, 9, 31, 14, 5))
+  expect(text).toContain("Current local time: 14:05.")
+  expect(text).toContain("Never call confirm_medication for a dose that is due later today.")
+  expect(text).toContain("- Amlodipine: 5 mg at 08:00")
 })
 
 test("transcript: elder placeholder keeps turn order, deltas stream, empty transcripts vanish", () => {
