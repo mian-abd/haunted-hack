@@ -2,6 +2,7 @@
 import { elder, isFake, prepareWebsocket, type Med, type Profile } from "./actor"
 import { callMode, dial, phoneCallEnded, startAutoDial, webhook } from "./elevenlabs"
 import { archiveCall, archiveEvent, recordFor, supabaseAuth } from "./store"
+import { clamp, organizeRecord, toRows } from "./organize"
 export { supabaseAuth } from "./store"
 
 const ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
@@ -43,6 +44,9 @@ const routes: Record<string, (elderId: string, b: Body) => Promise<unknown>> = {
   "GET /api/call/mode": async () => callMode(),
   "GET /api/records": id => records(id),
   "POST /api/records": (id, b) => addNote(id, b),
+  "GET /api/history": id => history(id),
+  "POST /api/records/organize": (id, b) => organizeDoc(id, b),
+  "POST /api/records/apply": (id, b) => applyDoc(id, b),
 }
 
 export async function handle(req: Request): Promise<Response> {
@@ -179,6 +183,22 @@ async function sb(path: string, init: RequestInit = {}): Promise<any> {
   return r.json()
 }
 
+// The doctor page's history: past calls and every care event from Supabase, newest first. No Supabase → empty, source "none".
+async function history(elderId: string) {
+  const id = encodeURIComponent(elderId)
+  try {
+    const [calls, events] = await Promise.all([
+      sb(`calls?patient_id=eq.${id}&select=started_at,ended_at,summary,mood&order=ended_at.desc.nullslast&limit=50`),
+      sb(`care_events?patient_id=eq.${id}&select=created_at,kind,from_agent,to_agent,text&order=created_at.desc&limit=200`),
+    ])
+    if (calls === null || events === null) return { calls: [], events: [], source: "none" }
+    return { calls, events, source: "supabase" }
+  } catch (e) {
+    console.warn(`[history] ${(e as Error).message}`)
+    return { calls: [], events: [], source: "none" }
+  }
+}
+
 // The doctor page's record: Supabase first, seed.json when Supabase is unset, errors, or has no such patient.
 async function records(elderId: string) {
   const id = encodeURIComponent(elderId)
@@ -211,6 +231,37 @@ async function addNote(elderId: string, b: Body) {
   if (author && author.length > 120) bad("author must be at most 120 characters")
   const rows = await sb("clinical_notes", { method: "POST", body: JSON.stringify({ patient_id: elderId, author, note }) })
   return rows ? { ok: true, note: rows[0] } : json({ error: "Supabase is not configured (set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)" }, 503)
+}
+
+// Troska's records agent: read an uploaded document into a structured record (organize.ts never invents facts).
+async function organizeDoc(elderId: string, b: Body) {
+  const text = need(b.text, "text").trim()
+  if (text.length > 20000) bad("text must be at most 20000 characters")
+  const patient = (await records(elderId)).patient ?? null
+  return organizeRecord(text, patient)
+}
+
+// Save the checked parts of an organized document. A medicine already on file is replaced, not duplicated:
+// it keeps its prescriber, and its refill count unless the document states one. Insert first, so a failed save loses nothing.
+async function applyDoc(elderId: string, b: Body) {
+  if (!b.organized || typeof b.organized !== "object") bad("organized must be an object")
+  if (b.author != null && typeof b.author !== "string") bad("author must be a string")
+  const author = (b.author?.trim() || "Troska records agent").slice(0, 120)
+  const { prescriptions, clinical_notes } = toRows(elderId, author, clamp(b.organized))
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: "Supabase is not configured (set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)" }, 503)
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+  const onFile: { id: string; name: string; prescriber: string | null; refills_left: number | null }[] = prescriptions.length
+    ? await sb(`prescriptions?patient_id=eq.${encodeURIComponent(elderId)}&select=id,name,prescriber,refills_left`)
+    : []
+  const rows = prescriptions.map(p => {
+    const old = onFile.find(r => same(r.name, p.name))
+    return old ? { ...p, prescriber: old.prescriber ?? p.prescriber, refills_left: p.refills_left ?? old.refills_left } : p
+  })
+  const replaced = onFile.filter(r => rows.some(p => same(r.name, p.name)))
+  if (rows.length) await sb("prescriptions", { method: "POST", body: JSON.stringify(rows) })
+  if (replaced.length) await sb(`prescriptions?id=in.(${replaced.map(r => r.id).join(",")})`, { method: "DELETE" })
+  if (clinical_notes.length) await sb("clinical_notes", { method: "POST", body: JSON.stringify(clinical_notes) })
+  return { ok: true, inserted: { prescriptions: rows.length, clinical_notes: clinical_notes.length } }
 }
 
 async function realtimeToken(): Promise<Response> {
