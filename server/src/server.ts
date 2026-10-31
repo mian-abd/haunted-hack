@@ -46,6 +46,10 @@ export async function handle(req: Request): Promise<Response> {
     : {}
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...cors, Vary: "Origin" } })
   const { pathname, searchParams } = new URL(req.url)
+  // A tunnel (cloudflared and ngrok set x-forwarded-for) may reach the authenticated ElevenLabs webhooks,
+  // and everything else only with the team access code (DEMO_ACCESS_KEY; the web app sends it as x-unc-key).
+  const teamKey = process.env.DEMO_ACCESS_KEY
+  if (req.headers.has("x-forwarded-for") && !pathname.startsWith("/api/el/") && !(teamKey && req.headers.get("x-unc-key") === teamKey)) return json({ error: "forbidden" }, 403)
   let res: Response
   try {
     if (req.method === "GET" && pathname === "/api/realtime-token") res = await realtimeToken()
@@ -73,7 +77,9 @@ async function runTool(elderId: string, name: string, a: Body): Promise<string> 
   const actor = elder(elderId)
   switch (name) {
     case "confirm_medication": {
-      const med = need(a.med, "med"), taken = flag(a.taken, "taken")
+      const said = need(a.med, "med"), taken = flag(a.taken, "taken")
+      // Voice models add the dose or time ("Amlodipine 5 mg"), and recordMed matches exact names: map to the listed med.
+      const med = (await actor.getState()).meds.find(m => said.toLowerCase().includes(m.name.toLowerCase()))?.name ?? said
       await actor.recordMed(med, taken, a.note)
       return `Logged: ${med} ${taken ? "taken" : "missed"}.`
     }
@@ -82,7 +88,10 @@ async function runTool(elderId: string, name: string, a: Body): Promise<string> 
       if (!["low", "medium", "high"].includes(severity)) bad("severity must be low, medium or high")
       await actor.logEvent({ kind: "symptom", text: symptom, from: "elder", data: { severity } })
       if (severity === "low") return `Logged symptom: ${symptom} (low).`
-      escalate({ elderId, kind: "symptom", reason: symptom, details: { severity } })
+      // The doctor sees this call's misses ("Amlodipine: not taken (ran out)"), so it can link them to the symptom.
+      const st = await actor.getState()
+      const missedMeds = st.meds.filter(m => m.missedCount).map(m => st.timeline.findLast(e => e.kind === "med" && e.data?.med === m.name)?.text ?? m.name)
+      escalate({ elderId, kind: "symptom", reason: symptom, details: { severity, missedMeds } })
       return `Logged symptom: ${symptom} (${severity}). Care team notified.`
     }
     case "teach_back_result": {
@@ -181,7 +190,7 @@ async function realtimeToken(): Promise<Response> {
 }
 
 if (import.meta.main) {
-  const server = Bun.serve({ port: Number(process.env.PORT || 8787), fetch: handle })
+  const server = Bun.serve({ hostname: "127.0.0.1", port: Number(process.env.PORT || 8787), fetch: handle }) // loopback only: no LAN access
   console.log(`server/ on ${server.url} · actor: ${isFake ? "in-memory fake" : process.env.TERSE_ACTOR_URL || "terse actor dev (127.0.0.1:7100)"} · care-team: ${process.env.CARE_TEAM_URL || "http://localhost:8788"}`)
   if (process.env.AUTO_DIAL === "1") {
     startAutoDial()

@@ -96,7 +96,7 @@ test("a tool webhook runs the same tool as the browser call", async () => {
   const res = await post("/api/el/tool/report_symptom", { symptom: "dizzy", severity: "medium", elder_id: ID }, { "x-unc-secret": SECRET })
   expect(res.status).toBe(200)
   expect((await res.json()).output).toBe("Logged symptom: dizzy (medium). Care team notified.")
-  expect(escalations()).toEqual([{ elderId: ID, kind: "symptom", reason: "dizzy", details: { severity: "medium" } }])
+  expect(escalations()).toEqual([{ elderId: ID, kind: "symptom", reason: "dizzy", details: { severity: "medium", missedMeds: [] } }])
   expect((await state()).timeline.at(-1)).toMatchObject({ kind: "symptom", text: "dizzy" })
 })
 

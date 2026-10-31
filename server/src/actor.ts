@@ -55,13 +55,19 @@ function fakeElder(id: string): Elder {
     s.timeline = [...s.timeline, ev].slice(-200)
     return ev
   }
-  const onAlarm = () => { s.callState = "due"; s.nextCheckInAt = null; log({ kind: "call_due", from: "system", text: "Check-in call is due" }) }
+  const arm = (atMs: number) => {
+    clearTimeout(alarms.get(id))
+    alarms.set(id, setTimeout(onAlarm, Math.max(0, atMs - Date.now())).unref())
+    s.nextCheckInAt = atMs
+  }
+  const onAlarm = () => {
+    if (s.callState === "in_progress") return arm(Date.now() + 60_000) // like the actor: never ring mid-call, retry in 60 s
+    s.callState = "due"; s.nextCheckInAt = null; log({ kind: "call_due", from: "system", text: "Check-in call is due" })
+  }
   return {
     async setup(profile, meds) { clearTimeout(alarms.get(id)); Object.assign(s, blank(), { profile, meds }) },
     async scheduleCheckIn(atMs, reason) {
-      clearTimeout(alarms.get(id))
-      alarms.set(id, setTimeout(onAlarm, Math.max(0, atMs - Date.now())).unref())
-      s.nextCheckInAt = atMs
+      arm(atMs)
       log({ kind: "note", from: "system", text: reason ? `Check-in scheduled: ${reason}` : "Check-in scheduled", data: { atMs } })
     },
     async startCall() { s.callState = "in_progress"; log({ kind: "call_started", from: "system", text: "Check-in call started" }) },

@@ -69,7 +69,39 @@ test("report_symptom: low logs only, medium/high also escalates", async () => {
   const r = await tool("report_symptom", { symptom: "dizzy when standing", severity: "medium" })
   expect(r.output).toBe("Logged symptom: dizzy when standing (medium). Care team notified.")
   expect((await state()).timeline.at(-1)).toMatchObject({ kind: "symptom", text: "dizzy when standing", data: { severity: "medium" } })
-  expect(escalations()).toEqual([{ elderId: ID, kind: "symptom", reason: "dizzy when standing", details: { severity: "medium" } }])
+  expect(escalations()).toEqual([{ elderId: ID, kind: "symptom", reason: "dizzy when standing", details: { severity: "medium", missedMeds: [] } }])
+})
+
+test("confirm_medication maps a spoken 'Amlodipine 5 mg' to the listed med; a later symptom case carries the miss", async () => {
+  expect((await tool("confirm_medication", { med: "Amlodipine 5 mg", taken: false, note: "ran out" })).output).toBe("Logged: Amlodipine missed.")
+  expect((await tool("confirm_medication", { med: "metformin 500 mg (morning)", taken: true })).output).toBe("Logged: Metformin taken.")
+  const meds = Object.fromEntries((await state()).meds.map(m => [m.name, m]))
+  expect(meds.Amlodipine).toMatchObject({ missedCount: 1, lastTakenAt: null })
+  expect(meds.Metformin!.lastTakenAt).toBeNumber()
+  expect((await tool("confirm_medication", { med: "Vitamin D", taken: true })).output).toBe("Logged: Vitamin D taken.") // unknown: logged as said
+
+  await tool("report_symptom", { symptom: "dizzy", severity: "medium" })
+  expect(escalations().at(-1).details).toEqual({ severity: "medium", missedMeds: ["Amlodipine: not taken (ran out)"] })
+})
+
+test("a forwarded (tunnel) request reaches only /api/el/*", async () => {
+  const via = (path: string, init: RequestInit = {}) =>
+    handle(new Request(`http://server.test${path}`, { ...init, headers: { "Content-Type": "application/json", "X-Forwarded-For": "203.0.113.9" } }))
+  expect((await via("/api/realtime-token")).status).toBe(403)
+  expect((await via("/api/demo/reset", { method: "POST", body: JSON.stringify({ elderId: ID }) })).status).toBe(403)
+  expect((await via("/api/tool", { method: "POST", body: JSON.stringify({ elderId: ID, name: "request_refill", args: { med: "Amlodipine" } }) })).status).toBe(403)
+  expect(escalations()).toEqual([])
+  expect((await via("/api/el/tool/request_refill", { method: "POST", body: "{}" })).status).not.toBe(403) // the webhooks do their own auth
+})
+
+test("the fake alarm never rings mid-call: it re-arms 60 s later", async () => {
+  await post("/api/call/start", { elderId: ID })
+  await post("/api/demo/schedule", { elderId: ID, inSeconds: 0 })
+  await Bun.sleep(10)
+  const s = await state()
+  expect(s.callState).toBe("in_progress")
+  expect(s.nextCheckInAt! - Date.now()).toBeGreaterThan(55_000)
+  expect(s.timeline.some(e => e.kind === "call_due")).toBe(false)
 })
 
 test("teach_back_result: not understood escalates once; the family lane is left to the care team", async () => {
