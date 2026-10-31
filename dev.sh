@@ -20,10 +20,12 @@ run() { # name dir command...
   local name=$1 dir=$2; shift 2
   ( cd "$dir" && exec "$@" </dev/null 2>&1 ) | while IFS= read -r line; do printf '[%s] %s\n' "$name" "$line"; done &
 }
-run actor     actor     env -u OPENAI_API_KEY "$TERSE" actor dev # the key stays out of the actor and the browser bundle
+# Server-only secrets and the elder's phone number stay out of the actor and the browser bundle.
+NOSECRETS="-u OPENAI_API_KEY -u SUPABASE_SERVICE_ROLE_KEY -u RELAY_WORKSPACE_KEY -u ELEVENLABS_API_KEY -u ELEVENLABS_WEBHOOK_SECRET -u EL_TOOL_SECRET -u ELDER_PHONE"
+run actor     actor     env $NOSECRETS "$TERSE" actor dev
 run server    server    bun run start
 run care-team care-team bun run start
-run web       web       env -u OPENAI_API_KEY bun run dev
+run web       web       env $NOSECRETS bun run dev
 
 for url in http://127.0.0.1:7100 http://localhost:8787 http://localhost:8788/health http://localhost:5173; do
   for i in $(seq 120); do
@@ -32,5 +34,5 @@ for url in http://127.0.0.1:7100 http://localhost:8787 http://localhost:8788/hea
     sleep 0.5
   done
 done
-echo "[dev] ready · web http://localhost:5173 · server http://localhost:8787 · care-team http://localhost:8788/health · actor http://127.0.0.1:7100"
+echo "[dev] ready · web http://localhost:5173/live · server http://localhost:8787 · care-team http://localhost:8788/health · actor http://127.0.0.1:7100"
 wait
