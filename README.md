@@ -228,6 +228,23 @@ cd web && vercel deploy --prod
 
 `vercel deploy` uploads `web/`, and Vercel builds it there with the `build` script. The project is already linked; the CLI keeps that link in `web/.vercel/`, which git ignores.
 
+### Keeping the backend up (Windows)
+
+[scripts/keep-alive.ps1](scripts/keep-alive.ps1) is a watchdog for the laptop that runs the backend. Every 30 seconds it checks the server (:8787), the care team (:8788) and the tunnel, and restarts whichever is down. If the tunnel has to restart, it gets a new URL, so the watchdog also re-points everything at it:
+1. It re-points the ElevenLabs webhooks with `bun run el:setup`.
+2. It writes the new URL into `web/vercel.json` and runs `vercel deploy --prod`.
+3. It restarts the server, so it loads the new webhook secret.
+
+Only then does it stop the old tunnel. To switch tunnels on purpose, create the file `%LOCALAPPDATA%\Troska\rotate-tunnel`. Logs go to `%LOCALAPPDATA%\Troska\`. The keys come from your Windows user environment, as above.
+
+To start it at every logon, run this once. It installs the "Troska keep-alive" scheduled task for your user (no admin needed) and starts it:
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts/install-keep-alive.ps1
+```
+
+Add `-Remove` to take the task out again. Only one watchdog runs at a time: a second copy waits and takes over when the first one exits. The laptop still has to stay awake and online. After it wakes, the watchdog brings back anything that stopped.
+
 ## Demo flow
 
 The 2-minute script is in [PLAN.md, Demo](PLAN.md#demo-the-centerpiece-one-person-talks-the-screen-shows-the-context-live). In short: Reset demo, Check-in in 15 s, Grandpa's phone rings (or he answers in the browser, the fallback), Grandpa says he is dizzy and out of his blood-pressure pills, the Care Feed fills with the doctor, pharmacy and family agents' messages, his status turns to watch with a recheck scheduled, then restart our server and show that the state and the pending recheck survive, because they live in the actor in Terse cloud.
