@@ -1,0 +1,143 @@
+{
+  "patients": [
+    {
+      "id": "grandpa-joe",
+      "name": "Joe Nguyen",
+      "age": 78,
+      "conditions": ["hypertension", "type 2 diabetes", "mild hearing loss"],
+      "family_name": "Linh",
+      "family_relation": "daughter",
+      "family_phone": "+1-555-0100",
+      "primary_doctor": "Dr. Patel"
+    },
+    {
+      "id": "nana-rosa",
+      "name": "Rosa Alvarez",
+      "age": 84,
+      "conditions": ["atrial fibrillation", "osteoarthritis"],
+      "family_name": "Marco",
+      "family_relation": "son",
+      "family_phone": "+1-555-0101",
+      "primary_doctor": "Dr. Okafor"
+    },
+    {
+      "id": "uncle-dave",
+      "name": "Dave Miller",
+      "age": 71,
+      "conditions": ["COPD", "high cholesterol"],
+      "family_name": "Sam",
+      "family_relation": "nephew",
+      "family_phone": "+1-555-0102",
+      "primary_doctor": "Dr. Patel"
+    }
+  ],
+  "prescriptions": [
+    {
+      "patient_id": "grandpa-joe",
+      "name": "Amlodipine",
+      "dose": "5 mg",
+      "times": ["08:00"],
+      "purpose": "blood pressure",
+      "prescriber": "Dr. Patel",
+      "refills_left": 0
+    },
+    {
+      "patient_id": "grandpa-joe",
+      "name": "Metformin",
+      "dose": "500 mg",
+      "times": ["08:00", "19:00"],
+      "purpose": "blood sugar, take with meals",
+      "prescriber": "Dr. Patel",
+      "refills_left": 2
+    },
+    {
+      "patient_id": "grandpa-joe",
+      "name": "Atorvastatin",
+      "dose": "20 mg",
+      "times": ["21:00"],
+      "purpose": "cholesterol",
+      "prescriber": "Dr. Patel",
+      "refills_left": 3
+    },
+    {
+      "patient_id": "nana-rosa",
+      "name": "Apixaban",
+      "dose": "5 mg",
+      "times": ["08:00", "20:00"],
+      "purpose": "blood thinner for atrial fibrillation",
+      "prescriber": "Dr. Okafor",
+      "refills_left": 4
+    },
+    {
+      "patient_id": "nana-rosa",
+      "name": "Acetaminophen",
+      "dose": "500 mg",
+      "times": ["08:00", "14:00"],
+      "purpose": "joint pain",
+      "prescriber": "Dr. Okafor",
+      "refills_left": 1
+    },
+    {
+      "patient_id": "uncle-dave",
+      "name": "Tiotropium inhaler",
+      "dose": "2 puffs",
+      "times": ["09:00"],
+      "purpose": "COPD maintenance",
+      "prescriber": "Dr. Patel",
+      "refills_left": 2
+    },
+    {
+      "patient_id": "uncle-dave",
+      "name": "Atorvastatin",
+      "dose": "40 mg",
+      "times": ["21:00"],
+      "purpose": "cholesterol",
+      "prescriber": "Dr. Patel",
+      "refills_left": 5
+    }
+  ],
+  "clinical_notes": [
+    {
+      "patient_id": "grandpa-joe",
+      "author": "Dr. Patel",
+      "note": "BP 150/92 at last visit. Dizziness possible if amlodipine is missed or doubled — do not double up on a missed dose.",
+      "created_at": "2026-10-03T16:20:00Z"
+    },
+    {
+      "patient_id": "grandpa-joe",
+      "author": "Dr. Patel",
+      "note": "Amlodipine has 0 refills left. 90-day renewal approved; pharmacy can fill it the same day.",
+      "created_at": "2026-10-03T16:25:00Z"
+    },
+    {
+      "patient_id": "grandpa-joe",
+      "author": "Dr. Patel",
+      "note": "Escalate to the on-call clinician right away for chest pain, fainting, slurred speech or BP above 180/110. Dizziness with none of these: rest, fluids, recheck within 2 hours.",
+      "created_at": "2026-10-03T16:30:00Z"
+    },
+    {
+      "patient_id": "grandpa-joe",
+      "author": "Nurse Kim",
+      "note": "Teach-back: patient sometimes confuses morning/evening metformin. Correct plan: 500 mg with breakfast (08:00) and 500 mg with dinner (19:00).",
+      "created_at": "2026-10-17T14:05:00Z"
+    },
+    {
+      "patient_id": "grandpa-joe",
+      "author": "Nurse Kim",
+      "note": "Mild hearing loss: speak slowly, ask one question at a time, and have him repeat key instructions back.",
+      "created_at": "2026-10-17T14:10:00Z"
+    },
+    {
+      "patient_id": "nana-rosa",
+      "author": "Dr. Okafor",
+      "note": "Fall risk: uses a walker. On apixaban, so ask about falls, dizziness and unusual bruising on every call.",
+      "created_at": "2026-09-28T15:00:00Z"
+    },
+    {
+      "patient_id": "uncle-dave",
+      "author": "Dr. Patel",
+      "note": "COPD stable on tiotropium. Ask about shortness of breath and cough; escalate if breathing is worse than usual.",
+      "created_at": "2026-10-10T17:45:00Z"
+    }
+  ]
+}

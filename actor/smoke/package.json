@@ -1,0 +1,10 @@
+{
+    "name": "unc-actor-smoke",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "generate": "terse actor generate",
+        "smoke": "bun smoke.ts",
+        "check": "../node_modules/.bin/tsc -p ."
+    }
+}
