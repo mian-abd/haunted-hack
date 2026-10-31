@@ -113,7 +113,10 @@ async function runTool(elderId: string, name: string, a: Body): Promise<string> 
     }
     case "request_refill": {
       const med = need(a.med, "med")
-      void archiveEvent(elderId, { kind: "note", from: "elder", text: `Refill requested: ${med}`, data: { med, refill: true } })
+      // The actor remembers the ask even if the care team is down; a `note` is kept but not shown as a chip or lane card.
+      const ev = { kind: "note" as const, from: "elder" as const, text: `Refill requested: ${med}`, data: { med, refill: true } }
+      await actor.logEvent(ev)
+      void archiveEvent(elderId, ev)
       escalate({ elderId, kind: "refill", reason: `Refill needed: ${med}`, details: { med } })
       return `Refill request sent to the pharmacy for ${med}.`
     }
@@ -169,7 +172,8 @@ async function realtimeToken(): Promise<Response> {
   // GA Realtime: mint a short-lived client secret (ek_...). The browser adds instructions and tools via session.update.
   const r = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
     method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    // The safety identifier is bound to the ephemeral token (docs: voice-webrtc), so the browser never sends it.
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "OpenAI-Safety-Identifier": "unc-browser-call" },
     body: JSON.stringify({
       session: {
         type: "realtime",

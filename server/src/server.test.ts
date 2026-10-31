@@ -116,8 +116,9 @@ test("teach_back_result: not understood escalates once; the family lane is left 
   expect(escalations()).toMatchObject([{ elderId: ID, kind: "teach_back", details: { med: "Metformin" } }])
 })
 
-test("request_refill escalates to the pharmacy", async () => {
+test("request_refill is remembered by the actor and escalates to the pharmacy", async () => {
   expect((await tool("request_refill", { med: "Amlodipine" })).output).toBe("Refill request sent to the pharmacy for Amlodipine.")
+  expect((await state()).timeline.at(-1)).toMatchObject({ kind: "note", from: "elder", text: "Refill requested: Amlodipine", data: { med: "Amlodipine", refill: true } })
   expect(escalations()).toEqual([{ elderId: ID, kind: "refill", reason: "Refill needed: Amlodipine", details: { med: "Amlodipine" } }])
 })
 
