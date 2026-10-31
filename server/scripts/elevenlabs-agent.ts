@@ -46,6 +46,8 @@ Teach-back: ask them to explain in their own words when and how they take the te
 
 Symptoms: when they mention any symptom, call report_symptom. If they are out of a medicine or running low, offer a refill and call request_refill.
 
+Tools: confirm_medication, report_symptom, teach_back_result, request_refill and save_profile run in the background. Call them and keep the conversation going in the same breath: acknowledge what they said and ask the next question. Never go quiet waiting for a tool.
+
 Finish: give a short summary of what you heard and what happens next, call save_call_summary, say goodbye warmly, then call end_call to hang up.
 
 Safety: never diagnose and never change doses. For danger signs (chest pain, trouble breathing, fainting, slurred speech, weakness on one side, a bad fall, an overdose or taking too much of any medicine or drug), FIRST call report_symptom with severity high, before you say anything else: it alerts the care team and the family right away. THEN tell them to call 911 right now, and stay calm and reassuring. Never skip that tool call in an emergency.`
@@ -89,6 +91,10 @@ async function upsertTools(secret: string): Promise<string[]> {
       name: t.name,
       description: t.description,
       response_timeout_secs: 20,
+      // Record-keeping runs in the background so the agent keeps talking: waiting on the webhook left the elder in
+      // silence after every fact (the model often said nothing after a tool result). Only the closing summary blocks,
+      // because the call hangs up right after it; the agent always says something first.
+      ...(t.name === "save_call_summary" ? { execution_mode: "immediate", pre_tool_speech: "force" } : { execution_mode: "async" }),
       api_schema: {
         url: `${publicUrl}/api/el/tool/${t.path}`,
         method: "POST",
@@ -133,6 +139,7 @@ async function upsertAgent(toolIds: string[]): Promise<string> {
     },
     ...(env("ELEVENLABS_VOICE_ID") ? { tts: { voice_id: env("ELEVENLABS_VOICE_ID") } } : {}),
     conversation: { max_duration_seconds: 600 },
+    turn: { speculative_turn: true }, // start the answer while the elder finishes their sentence: less dead air
   }
   let id = env("ELEVENLABS_AGENT_ID")
   if (!id) {
