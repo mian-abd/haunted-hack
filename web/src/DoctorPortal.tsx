@@ -1,5 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { getJSON, post, ELDER } from "./api"
+import { History } from "./doctor/History"
+import { RecordOrganizer } from "./RecordOrganizer"
+import { IntakeSurvey } from "./doctor/IntakeSurvey"
 import "./DoctorPortal.css"
 
 // shortcut: demo login checked in the browser, not real auth (the API stays gated by the team access code); replace with real sign-in before real patient data.
@@ -62,11 +65,12 @@ function Record({ onSignOut }: { onSignOut: () => void }) {
   const [data, setData] = useState<any>(null)
   const [loadError, setLoadError] = useState("")
   const [notes, setNotes] = useState<Note[]>([])
-  useEffect(() => {
+  const [historyKey, setHistoryKey] = useState(0)
+  const reloadNotes = () =>
     getJSON(`/api/records?elderId=${ELDER}`)
       .then(d => { setData(d); setNotes(d.clinical_notes ?? []) })
       .catch(() => setLoadError("We could not load the patient record. Check the connection and reload the page."))
-  }, [])
+  useEffect(() => { reloadNotes() }, [])
   const p = data?.patient
 
   return (
@@ -101,7 +105,7 @@ function Record({ onSignOut }: { onSignOut: () => void }) {
                 <li key={`${m.name}-${i}`}>
                   <p><strong>{m.name}</strong> <span className="dp-muted">{m.dose}</span></p>
                   <p>For {m.purpose}. Taken at {(m.times ?? []).join(", ")}.</p>
-                  <p className="dp-muted">{m.refills_left} refill{m.refills_left === 1 ? "" : "s"} left</p>
+                  {m.refills_left != null && <p className="dp-muted">{m.refills_left} refill{m.refills_left === 1 ? "" : "s"} left</p>}
                 </li>
               ))}
             </ul>
@@ -125,7 +129,10 @@ function Record({ onSignOut }: { onSignOut: () => void }) {
         </section>
       )}
 
+      {data && <RecordOrganizer elderId={ELDER} author="Dr. Patel's office" onSaved={() => { reloadNotes(); setHistoryKey(k => k + 1) }} />}
       {data && <AddNote onSaved={n => setNotes(ns => [n, ...ns])} />}
+      {data && <History key={historyKey} elderId={ELDER} />}
+      {data && <IntakeSurvey elderId={ELDER} author="" onSaved={() => { reloadNotes(); setHistoryKey(k => k + 1) }} />}
     </>
   )
 }
