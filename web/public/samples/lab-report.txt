@@ -1,0 +1,30 @@
+SAMPLE DOCUMENT — fictional patient for the Troska demo
+
+Riverside Community Hospital (fictional)
+Laboratory Report
+
+Patient: Joe Nguyen
+Age: 78
+Troska patient ID: grandpa-joe
+Ordered by: Dr. Reyes, hospital medicine (copy to Dr. Patel)
+Specimen: blood, fasting
+Collected: Oct 25, 2026, 06:10
+Reported: Oct 25, 2026, 09:45
+
+RESULTS:
+- Hemoglobin A1C: 7.1 % (reference 4.0 to 5.6 %) HIGH
+- eGFR: 68 mL/min/1.73m2 (reference 60 or higher) NORMAL
+- LDL cholesterol: 96 mg/dL (reference below 100 mg/dL) NORMAL
+- Potassium: 4.2 mmol/L (reference 3.5 to 5.1 mmol/L) NORMAL
+
+NOTES:
+- A1C is 7.1 %, a little above the diabetes goal of below 7 %. It was 7.4 % on Jul 18, 2026, so it is improving. Continue metformin.
+- Kidney function (eGFR 68) is mildly reduced for age and stable. The current metformin dose is still safe at this level.
+- LDL cholesterol is at goal on atorvastatin.
+- Potassium is normal.
+
+FOLLOW-UP:
+- Repeat A1C in 3 months, in late January 2027.
+- Repeat eGFR and potassium at the next visit with Dr. Patel.
+
+Questions about these results: Riverside Community Hospital lab, 555-0143.

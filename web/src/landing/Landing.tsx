@@ -32,6 +32,7 @@ export function Landing() {
       <header className="lp-head lp-wrap">
         <a className="lp-wordmark" href="/">Troska</a>
         <nav className="lp-nav" aria-label="Main">
+          <a className="lp-nav-watch" href="/doctor">For doctors and families</a>
           <a className="lp-nav-watch" href="/live">Watch it live</a>
           <a className="lp-nav-call" href={TROSKA_TEL}><Icon name="phone" />Call Troska</a>
         </nav>
@@ -89,6 +90,7 @@ export function Landing() {
 
       <footer className="lp-foot lp-wrap">
         <p>Built with Terse durable actors · Agent Relay · Supabase · OpenAI · ElevenLabs</p>
+        <p><a href="/doctor">Doctors and families: sign in to the patient record</a></p>
         <p>Joe and his family are fictional demo characters.</p>
       </footer>
     </div>

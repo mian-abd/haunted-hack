@@ -1,0 +1,45 @@
+SAMPLE DOCUMENT — fictional patient for the Troska demo
+
+Riverside Community Hospital (fictional)
+Discharge Summary
+
+Patient: Joe Nguyen
+Age: 78
+Troska patient ID: grandpa-joe
+Admitted: Oct 24, 2026
+Discharged: Oct 26, 2026
+Attending physician: Dr. Reyes, hospital medicine
+Primary care doctor: Dr. Patel
+Discharged to: home, with his daughter Linh
+
+SUMMARY:
+Joe Nguyen, 78, stayed two nights for dizziness when standing up and high blood pressure (168/96 on arrival). He was mildly dehydrated. His blood pressure came down to 132/80 on his usual amlodipine, and the dizziness got better with fluids and standing up slowly. His vitamin D level was low, so Vitamin D3 was started. He went home in stable condition.
+
+DIAGNOSES:
+- Hypertension
+- Type 2 diabetes
+- Orthostatic dizziness
+
+ALLERGIES:
+- Penicillin (hives)
+
+MEDICATIONS AT DISCHARGE:
+- Amlodipine 5 mg — 08:00 — blood pressure
+- Metformin 500 mg — 08:00, 19:00 — blood sugar, take with meals
+- Atorvastatin 20 mg — 21:00 — cholesterol
+- Vitamin D3 1000 IU — 08:00 — bone health, low vitamin D
+
+DISCHARGE INSTRUCTIONS:
+- NEW: Vitamin D3 was started during this stay. Take one tablet every morning with breakfast.
+- No changes to Amlodipine, Metformin or Atorvastatin.
+- Stand up slowly. Sit on the edge of the bed for a minute before you stand.
+- Drink fluids through the day, about 6 to 8 glasses of water, unless your doctor says otherwise.
+- Do not double doses. If you miss a dose, do not take two to catch up. Call the care team if you are not sure.
+- Check your blood pressure every morning and write it down.
+- Call 911 for chest pain, fainting, slurred speech or weakness on one side.
+
+FOLLOW-UP:
+- See Dr. Patel (primary care) in 1 week, by Nov 2, 2026.
+- Blood pressure check in 2 weeks, by Nov 9, 2026.
+
+Questions after discharge: Riverside Community Hospital nurse line, 555-0142.

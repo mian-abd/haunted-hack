@@ -4,6 +4,7 @@ import { MOCK, post } from "./api"
 import { CallAction, HeardCard, Icon, TROSKA_LINE, clock, firstName, useCall, type Call } from "./CallPanel"
 import { CareFeed } from "./CareFeed"
 import { Landing } from "./landing/Landing"
+import { DoctorPortal } from "./DoctorPortal"
 import { useActor, type Conn } from "./live"
 import { medBadge, type ElderState, type Med, type TimelineEvent } from "./state"
 import "./styles.css"
@@ -159,6 +160,7 @@ function App() {
       <header className="lv-top">
         <a className="lv-brand" href="/">Troska</a>
         <a className="lv-line" href={TROSKA_LINE.href}><Icon name="phone" />Troska's line: {TROSKA_LINE.label}</a>
+        <a className="lv-line" href="/doctor">For doctors and families</a>
         <span className={`lv-conn is-${conn}`}><span className="lv-conn-dot" aria-hidden="true" />{CONN[conn]}</span>
       </header>
       <main className="lv-main">
@@ -177,7 +179,8 @@ function App() {
   )
 }
 
-// No router library: "/live" is the dashboard, every other path the landing page (vercel.json rewrites all paths here).
-const live = location.pathname.replace(/\/+$/, "") === "/live"
-if (live) document.title = "Troska · Care dashboard"
-createRoot(document.getElementById("root")!).render(live ? <App /> : <Landing />)
+// No router library: "/live" is the demo dashboard, "/doctor" the doctor and family page, every other path the landing page (vercel.json rewrites all paths here).
+const path = location.pathname.replace(/\/+$/, "")
+if (path === "/live") document.title = "Troska · Care dashboard"
+if (path === "/doctor") document.title = "Troska · For doctors and families"
+createRoot(document.getElementById("root")!).render(path === "/live" ? <App /> : path === "/doctor" ? <DoctorPortal /> : <Landing />)

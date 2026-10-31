@@ -1,0 +1,34 @@
+SAMPLE DOCUMENT — fictional patient for the Troska demo
+
+Corner Pharmacy (fictional)
+Medication List and Refill Status
+
+Patient: Joe Nguyen
+Age: 78
+Troska patient ID: grandpa-joe
+Prescriber: Dr. Patel
+Printed: Oct 30, 2026
+Pharmacy phone: 555-0156
+
+ALLERGIES:
+- Penicillin (hives)
+
+CURRENT MEDICATIONS:
+- Amlodipine 5 mg — 08:00 — blood pressure
+- Metformin 500 mg — 08:00, 19:00 — blood sugar, take with meals
+- Atorvastatin 20 mg — 21:00 — cholesterol
+- Vitamin D3 1000 IU — 08:00 — bone health, low vitamin D
+
+REFILLS:
+- Amlodipine: 0 refills left. Last filled Oct 1, 2026 (30 tablets), runs out Oct 31, 2026. Renewal requested from Dr. Patel on Oct 28, 2026.
+- Metformin: 2 refills left. Last filled Oct 12, 2026 (60 tablets).
+- Atorvastatin: 3 refills left. Last filled Oct 12, 2026 (30 tablets).
+- Vitamin D3: over the counter, no refills needed. Bought Oct 27, 2026.
+
+PICKUP:
+- Pick up at the Corner Pharmacy counter. Open Monday to Friday 9 am to 7 pm, Saturday 10 am to 4 pm.
+- Amlodipine will be ready the same day Dr. Patel approves the renewal.
+- Metformin and Atorvastatin refills are due about Nov 11, 2026.
+
+FOLLOW-UP:
+- Pick up the renewed Amlodipine at Corner Pharmacy as soon as it is approved, so no morning dose is missed.
