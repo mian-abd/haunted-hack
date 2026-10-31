@@ -1,0 +1,113 @@
+/* The care circle (a small picture of people connected) and the updates list. Open sections: whitespace and hairlines, no boxes. */
+.cf { display: grid; gap: var(--space-7, 56px); }
+.cf-sec { min-width: 0; padding-top: var(--space-5); border-top: 1px solid var(--line); }
+.cf-sec h2 { font-size: 30px; }
+.cf-sub { margin-top: var(--space-1); color: var(--ink-2); font-size: var(--text-small); max-width: 52ch; }
+.cf-empty { margin-top: var(--space-3); color: var(--ink-2); max-width: 52ch; }
+
+/* The map: the coordinator in the middle, thin lines out to the doctor, the pharmacy and the family. */
+.cf-map { position: relative; aspect-ratio: 16 / 10; margin-top: var(--space-4); }
+@media (max-width: 640px) { .cf-map { aspect-ratio: 1; } }
+.cf-wires { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.cf-wires line {
+  stroke: color-mix(in srgb, var(--ink-2) 40%, transparent); stroke-width: 1.5; stroke-dasharray: 2 6; stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.cf-wires line.is-on { stroke: var(--ink); stroke-width: 2; stroke-dasharray: none; }
+.cf-hub {
+  position: absolute; z-index: 1; transform: translate(-50%, -50%); width: min(40%, 200px);
+  display: grid; justify-items: center; gap: var(--space-2); text-align: center;
+}
+.cf-mark {
+  display: grid; place-items: center; width: 84px; height: 84px; border-radius: 50%;
+  background: var(--ink); color: var(--surface); font: 400 44px / 1 var(--font-display);
+  box-shadow: 0 0 0 8px var(--paper), 0 8px 22px rgb(28 36 51 / 0.2);
+}
+.cf-hub-name { font-family: var(--font-display); font-size: 18px; line-height: 1.2; text-wrap: balance; }
+
+.cf-node {
+  position: absolute; z-index: 1; transform: translate(-50%, -50%);
+  display: grid; justify-items: center; gap: 2px; width: min(34%, 190px); padding: var(--space-2);
+  border: 0; border-radius: 16px; background: none; color: var(--ink);
+  font: inherit; text-align: center; cursor: pointer;
+}
+.cf-ava { position: relative; display: block; width: 76px; height: 76px; margin-bottom: var(--space-2); border-radius: 50%; }
+.cf-face {
+  display: grid; place-items: center; width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
+  box-shadow: 0 0 0 6px var(--paper), 0 6px 16px rgb(28 36 51 / 0.16);
+  transition: transform 200ms var(--lv-ease, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.cf-initial { background: var(--surface-2); color: var(--ink); font: 400 32px / 1 var(--font-display); }
+.cf-node:hover .cf-face { transform: scale(1.05); }
+.cf-node:active .cf-face { transform: scale(0.97); }
+.cf-node[aria-pressed="true"] .cf-face { box-shadow: 0 0 0 4px var(--paper), 0 0 0 7px var(--ink), 0 6px 16px rgb(28 36 51 / 0.16); }
+.cf-node[aria-pressed="true"] .cf-node-title { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 0.25em; }
+.cf-node-title { font-weight: 700; font-size: 18px; line-height: 1.25; overflow-wrap: anywhere; }
+.cf-node-meta { color: var(--ink-2); font-size: 15px; line-height: 1.35; font-variant-numeric: tabular-nums; }
+.cf-badge {
+  position: absolute; top: -4px; right: -10px; min-width: 30px; padding: 2px 8px; border-radius: var(--radius-pill);
+  background: var(--lv-accent, #E8743B); color: var(--ink); font-size: 15px; font-weight: 700; line-height: 1.5; text-align: center;
+  box-shadow: 0 0 0 3px var(--paper); font-variant-numeric: tabular-nums; animation: cf-pop 500ms var(--lv-ease, ease-out) both;
+}
+@keyframes cf-pop { from { opacity: 0; transform: scale(0.6); } }
+
+/* A message in flight: the dot runs under the cards along the wire, then the person pulses once. */
+.cf-flight {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0;
+  animation: cf-travel 1000ms var(--lv-ease, ease-out) forwards;
+}
+.cf-flight.is-back { animation-direction: reverse; }
+.cf-flight i {
+  position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%;
+  background: var(--lv-accent, #E8743B); box-shadow: 0 2px 10px rgb(232 116 59 / 0.55);
+}
+@keyframes cf-travel {
+  0% { opacity: 0; transform: translate(0, 0); }
+  10%, 90% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)); }
+}
+.cf-pulse {
+  position: absolute; inset: -6px; border: 2px solid var(--lv-accent, #E8743B); border-radius: inherit;
+  opacity: 0; pointer-events: none; animation: cf-ping 900ms var(--lv-ease, ease-out) 800ms forwards;
+}
+.cf-pulse.is-back { animation-delay: 0ms; }
+.cf-pulse { border-radius: 50%; }
+@keyframes cf-ping { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(1.18); } }
+
+/* Updates: who told whom, newest first; a row opens to the full message and its time. */
+.cf-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); }
+.cf-filter { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); font-weight: 700; }
+.cf-reset {
+  min-height: 40px; padding: 6px 16px; border: 1px solid var(--line); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--ink); font: inherit; font-size: var(--text-small); font-weight: 700; cursor: pointer;
+}
+.cf-reset:hover { background: var(--surface-2); }
+.cf-list { margin-top: var(--space-4); }
+.cf-row { border-top: 1px solid var(--line); animation: cf-in 600ms var(--lv-ease, ease-out) both; }
+@keyframes cf-in { from { opacity: 0; transform: translateY(-12px); } }
+.cf-row summary {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px var(--space-3);
+  padding: var(--space-4) 0; cursor: pointer; list-style: none;
+}
+.cf-row summary::-webkit-details-marker { display: none; }
+.cf-meta { grid-column: 1; color: var(--ink-2); font-size: var(--text-small); font-weight: 700; font-variant-numeric: tabular-nums; }
+.cf-text {
+  grid-column: 1; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.cf-row details[open] .cf-text { display: block; }
+.cf-chev {
+  grid-column: 2; grid-row: 1 / span 2; align-self: center; width: 22px; height: 22px; color: var(--ink-2);
+  transition: transform 250ms var(--lv-ease, ease-out);
+}
+.cf-row details[open] .cf-chev { transform: rotate(180deg); }
+.cf-full { padding: 0 0 var(--space-4); color: var(--ink-2); font-size: var(--text-small); }
+
+@media (max-width: 640px) {
+  .cf-mark { width: 64px; height: 64px; font-size: 34px; }
+  .cf-hub-name { font-size: 16px; }
+  .cf-ava { width: 60px; height: 60px; }
+  .cf-node { width: 36%; padding: var(--space-1); }
+  .cf-node-title { font-size: 16px; }
+  .cf-node-meta { font-size: 14px; }
+}

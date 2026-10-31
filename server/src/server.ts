@@ -1,7 +1,7 @@
 // server/: HTTP API from PLAN.md. Bun.serve on :8787, no framework.
 import { elder, isFake, prepareWebsocket, type Med, type Profile } from "./actor"
 import { callMode, dial, phoneCallEnded, startAutoDial, webhook } from "./elevenlabs"
-import { archiveCall, archiveEvent, profileFields, recordFor, saveProfile } from "./store"
+import { archiveCall, archiveEvent, profileFields, recordFor, saveProfile, supabaseAuth } from "./store"
 export { supabaseAuth } from "./store"
 
 const ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
@@ -41,6 +41,8 @@ const routes: Record<string, (elderId: string, b: Body) => Promise<unknown>> = {
   "POST /api/call/end": async (id, b) => { await endCall(id, typeof b.summary === "string" && b.summary.trim() ? b.summary : "Call ended.", b.mood); return OK },
   "POST /api/call/dial": id => dial(id),
   "GET /api/call/mode": async () => callMode(),
+  "GET /api/records": id => records(id),
+  "POST /api/records": (id, b) => addNote(id, b),
 }
 // Routes about the server's own configuration, with no elder behind them: `elderId` is accepted but not required.
 const NO_ELDER = new Set(["GET /api/call/mode"])
@@ -175,6 +177,54 @@ async function seedFor(elderId: string): Promise<[Profile, Med[]]> {
     .filter((r: Body) => r.patient_id === elderId)
     .map((r: Body) => ({ name: r.name, dose: r.dose, times: r.times, purpose: r.purpose, lastTakenAt: null, missedCount: 0 }))
   return [profile, meds]
+}
+
+// shortcut: copies store.ts rest() (not exported, and this change stays in server.ts); export it from store.ts when touching both.
+// PostgREST call that returns the rows, or null when Supabase is unset.
+async function sb(path: string, init: RequestInit = {}): Promise<any> {
+  const { SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: key } = process.env
+  if (!url || !key) return null
+  const r = await fetch(`${url.replace(/\/+$/, "")}/rest/v1/${path}`, {
+    ...init,
+    headers: { ...supabaseAuth(key), "Content-Type": "application/json", Prefer: "return=representation" },
+    signal: AbortSignal.timeout(5000),
+  })
+  if (!r.ok) throw new Error(`${init.method ?? "GET"} ${path.split("?")[0]} ${r.status}: ${(await r.text()).slice(0, 200)}`)
+  return r.json()
+}
+
+// The doctor page's record: Supabase first, seed.json when Supabase is unset, errors, or has no such patient.
+async function records(elderId: string) {
+  const id = encodeURIComponent(elderId)
+  try {
+    const [patients, prescriptions, clinical_notes] = await Promise.all([
+      sb(`patients?id=eq.${id}&select=*`),
+      sb(`prescriptions?patient_id=eq.${id}&select=*&order=name`),
+      sb(`clinical_notes?patient_id=eq.${id}&select=*&order=created_at.desc`),
+    ])
+    if (patients?.[0]) return { patient: patients[0], prescriptions, clinical_notes, source: "supabase" }
+  } catch (e: any) {
+    console.warn(`[records] Supabase read failed, using seed.json: ${e?.message ?? e}`)
+  }
+  const seed = await Bun.file(SEED).json()
+  const mine = (rows: Body[] = []) => rows.filter(r => r.patient_id === elderId)
+  return {
+    patient: seed.patients.find((x: Body) => x.id === elderId) ?? bad(`no patient "${elderId}" in supabase/seed.json`),
+    prescriptions: mine(seed.prescriptions),
+    clinical_notes: mine(seed.clinical_notes).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))),
+    source: "seed",
+  }
+}
+
+// A doctor's note from the doctor page, into Supabase clinical_notes.
+async function addNote(elderId: string, b: Body) {
+  const note = need(b.note, "note").trim()
+  if (note.length > 4000) bad("note must be at most 4000 characters")
+  if (b.author != null && typeof b.author !== "string") bad("author must be a string")
+  const author: string | null = b.author?.trim() || null
+  if (author && author.length > 120) bad("author must be at most 120 characters")
+  const rows = await sb("clinical_notes", { method: "POST", body: JSON.stringify({ patient_id: elderId, author, note }) })
+  return rows ? { ok: true, note: rows[0] } : json({ error: "Supabase is not configured (set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)" }, 503)
 }
 
 async function realtimeToken(): Promise<Response> {

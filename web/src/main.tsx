@@ -1,15 +1,17 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { createRoot } from "react-dom/client"
 import { MOCK, post } from "./api"
-import { CallPanel, useCall, type Call } from "./CallPanel"
+import { CallAction, HeardCard, Icon, TROSKA_LINE, clock, firstName, useCall, type Call } from "./CallPanel"
 import { CareFeed } from "./CareFeed"
 import { Landing } from "./landing/Landing"
 import { useActor, type Conn } from "./live"
-import { countdown, medBadge, type ElderState } from "./state"
+import { medBadge, type ElderState, type Med, type TimelineEvent } from "./state"
 import "./styles.css"
+import "./live.css"
 
-const STATUS_LABEL = { ok: "OK", watch: "Watch", urgent: "Urgent" }
-const CONN_LABEL: Record<Conn, string> = { connecting: "Connecting", live: "Live", polling: "Polling", offline: "Server offline", mock: "Mock data" }
+const CONN: Record<Conn, string> = { connecting: "Connecting", live: "Live", polling: "Reconnecting", offline: "Offline", mock: "Sample data" }
+const STATUS = { ok: (w: string) => `${w} is OK`, watch: (w: string) => `${w} needs attention`, urgent: (w: string) => `Urgent: call ${w} now` }
+const STATUS_ICON = { ok: "good", watch: "warn", urgent: "bad" } as const
 
 function useNow() {
   const [now, setNow] = useState(Date.now())
@@ -20,75 +22,131 @@ function useNow() {
   return now
 }
 
-function TopBar({ state, conn, now, children }: { state: ElderState; conn: Conn; now: number; children: ReactNode }) {
+function nextCall(s: ElderState, now: number): ReactNode {
+  if (s.callState === "in_progress") return "A check-in call is happening now"
+  if (s.callState === "due") return "A check-in call is due now"
+  if (s.nextCheckInAt == null) return "No call scheduled yet"
+  const sec = Math.ceil((s.nextCheckInAt - now) / 1000)
+  if (sec <= 0) return "Next call starting now"
+  const min = Math.ceil(sec / 60)
+  const left = sec < 60 ? `${sec} sec` : min < 60 ? `${min} min` : `${Math.floor(min / 60)} hr${min % 60 ? ` ${min % 60} min` : ""}`
+  return <>Next call at {clock(s.nextCheckInAt)} · <span className="lv-count">in {left}</span></>
+}
+
+/** The answer, above the fold: how Joe is, why, when Troska calls next, and the one big action. */
+function StatusBand({ state, call, now }: { state: ElderState; call: Call; now: number }) {
   const p = state.profile
-  const next = state.callState === "due" ? "Ringing" : state.callState === "in_progress" ? "On a call" : countdown(state.nextCheckInAt, Date.now()) // not the 1 s tick: a stale tick could flash 0:16 for a 15 s check-in
+  const who = firstName(state)
   return (
-    <header className="top">
-      <a className="brand" href="/">
-        <span className="logo">Troska</span>
-        <span className="tagline">AI care team</span>
-      </a>
-      {p ? (
-        <section className="elder-card" aria-label="Elder status">
-          <div className="ident">
-            <div className="avatar" aria-hidden="true">{p.name.split(" ").map(w => w[0]).join("").slice(0, 2)}</div>
-            <div>
-              <h1>{p.name}, {p.age}</h1>
-              <p className="muted">{p.conditions.join(" · ")}</p>
-            </div>
-          </div>
-          <div className="status">
-            <span key={state.status} className={`pill pill-${state.status}`}>{STATUS_LABEL[state.status]}</span>
-            <p>{state.statusReason || "No concerns right now"}</p>
-          </div>
-          <ul className="meds" aria-label="Medications">
-            {state.meds.map(m => {
-              const b = medBadge(m, now)
-              return (
-                <li key={m.name}>
-                  <span className="med-name">{m.name}</span>
-                  <span className={`badge badge-${b}`}>
-                    {b === "taken" ? "Taken" : b === "missed" ? `Missed${m.missedCount > 1 ? ` ×${m.missedCount}` : ""}` : m.times.join(" · ")}
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
-          <div className="next">
-            <span>Next check-in</span>
-            <strong>{next}</strong>
-          </div>
-        </section>
-      ) : (
-        <section className="elder-card elder-empty">No elder loaded yet. Open Demo controls and press Reset demo.</section>
+    <section className={`lv-band is-${p ? state.status : "empty"}`} aria-labelledby="status-title">
+      {p && (
+        <figure className="lv-person">
+          <img src="/press/lead-joe.webp" width={1536} height={1024} alt={`${p.name} at his kitchen table, talking on the phone`} />
+          <figcaption>
+            <span className="lv-name">{p.name}, {p.age}</span>
+            <span className="lv-line1">Troska calls {who} every day</span>
+          </figcaption>
+        </figure>
       )}
-      <div className="top-right">
-        <span className={`conn conn-${conn}`}>{CONN_LABEL[conn]}</span>
-        {children}
-      </div>
-    </header>
+      {p ? (
+        <div className="lv-verdict" key={state.status}>
+          <h1 id="status-title"><Icon name={STATUS_ICON[state.status]} className="icon lv-verdict-icon" />{STATUS[state.status](who)}</h1>
+          <p className="lv-reason">{state.statusReason || "No concerns at the last check-in."}</p>
+          <p className="lv-next"><Icon name="clock" />{nextCall(state, now)}</p>
+        </div>
+      ) : (
+        <div className="lv-verdict">
+          <h1 id="status-title">No one to show yet</h1>
+          <p className="lv-reason">Once a parent is set up, how they are doing shows up here. For the demo, open Demo tools at the bottom of the page and press Reset demo.</p>
+        </div>
+      )}
+      <CallAction state={state} call={call} now={now} />
+    </section>
   )
 }
 
-function DemoControls({ call }: { call: Call }) {
-  const [msg, setMsg] = useState(MOCK ? "Mock mode: buttons do not reach the server" : "")
+const timeOfDay = (t: string) => new Date(`2000-01-01T${t}`).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+const MED_ICON = { taken: "good", missed: "bad", due: "clock" } as const
+
+function Medicines({ meds, now, who }: { meds: Med[]; now: number; who: string }) {
+  const hhmm = new Date(now).toTimeString().slice(0, 5)
+  return (
+    <section className="lv-sec lv-meds" aria-labelledby="meds-title">
+      <h2 id="meds-title">Medicines</h2>
+      {meds.length === 0 ? (
+        <p className="lv-empty">Once {who}'s medicines are set up, Troska asks about each one on every call and marks it taken or missed here. To set them up for the demo, open Demo tools below and press Reset demo.</p>
+      ) : (
+        <ul>
+          {meds.map(m => {
+            const b = medBadge(m, now)
+            const next = m.times.find(t => t > hhmm) ?? m.times[0]
+            const words = b === "taken" ? "Taken today" : b === "missed" ? (m.missedCount > 1 ? `Missed ${m.missedCount} times` : "Missed") : next ? `Due at ${timeOfDay(next)}` : "Not confirmed yet"
+            return (
+              <li key={m.name}>
+                <div>
+                  <p className="lv-med-name">{m.name} <span>{m.dose}</span></p>
+                  <p className="lv-med-sub">For {m.purpose.split(",")[0]} · {m.times.map(timeOfDay).join(" and ")}</p>
+                </div>
+                <span className={`lv-chip is-${b}`}><Icon name={MED_ICON[b]} />{words}</span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+const DAY = 86_400_000
+function when(ts: number, now: number) {
+  const d = (x: number) => new Date(x).setHours(0, 0, 0, 0)
+  const days = Math.round((d(now) - d(ts)) / DAY)
+  const day = days === 0 ? "Today" : days === 1 ? "Yesterday" : new Date(ts).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })
+  return `${day} ${clock(ts)}`
+}
+
+/** "Troska remembers": every finished call, newest first, in one line each. */
+function Remembers({ timeline, now, who }: { timeline: TimelineEvent[]; now: number; who: string }) {
+  const calls = timeline.filter(e => e.kind === "call_ended").reverse()
+  const line = (e: TimelineEvent) => {
+    const mood = typeof e.data?.mood === "string" && e.data.mood !== "unknown" ? `felt ${e.data.mood}` : ""
+    return [e.text.trim().replace(/\.$/, ""), mood].filter(Boolean).join(", ") || "A short call."
+  }
+  return (
+    <section className="lv-sec lv-memory" aria-labelledby="memory-title">
+      <h2 id="memory-title">Troska remembers</h2>
+      {calls.length === 0 ? (
+        <p className="lv-empty">Every call adds a line here, so you can see how {who} has been from one day to the next.</p>
+      ) : (
+        <ol className="lv-mem-list">
+          {calls.map(e => (
+            <li key={e.id}><time dateTime={new Date(e.ts).toISOString()}>{when(e.ts, now)}</time><span>{line(e)}.</span></li>
+          ))}
+        </ol>
+      )}
+    </section>
+  )
+}
+
+function DemoTools({ call }: { call: Call }) {
+  const [msg, setMsg] = useState(MOCK ? "Sample data: these buttons do nothing here." : "")
   const run = (label: string, path: string, body: Record<string, unknown> = {}) =>
     post(path, body).then(
-      () => setMsg(`${label}: done`),
-      (err: Error) => setMsg(`${label} failed: ${err.message}`),
+      () => setMsg(`${label}: done.`),
+      (err: Error) => setMsg(`${label} did not work: ${err.message}`),
     )
   return (
-    <details className="demo">
-      <summary>Demo controls</summary>
-      <div className="demo-body">
-        <button onClick={() => { call.clear(); void run("Reset", "/api/demo/reset") }}>Reset demo</button>
-        <button onClick={() => run("Check-in in 15 s", "/api/demo/schedule", { inSeconds: 15 })}>Check-in in 15 s</button>
-        <button onClick={() => run("Vitals spike", "/api/demo/vitals", { heartRate: 128, note: "Simulated watch reading" })}>Simulate vitals spike</button>
-        <button onClick={call.startScript} disabled={call.phase !== "idle"}>Run scripted demo</button>
-        {msg && <p className="demo-msg" role="status">{msg}</p>}
-      </div>
-    </details>
+    <footer className="lv-foot">
+      <details className="lv-tools">
+        <summary>Demo tools</summary>
+        <div className="lv-tools-body">
+          <button className="btn btn-secondary btn-small" onClick={() => { call.clear(); void run("Reset demo", "/api/demo/reset") }}>Reset demo</button>
+          <button className="btn btn-secondary btn-small" onClick={() => run("Next call in 1 minute", "/api/demo/schedule", { inSeconds: 60 })}>Schedule the next call in 1 minute</button>
+          {msg && <p role="status">{msg}</p>}
+        </div>
+      </details>
+      <p className="lv-fiction">Joe and his family are fictional demo characters.</p>
+    </footer>
   )
 }
 
@@ -97,19 +155,29 @@ function App() {
   const now = useNow()
   const call = useCall(state)
   return (
-    <div className="app">
-      <TopBar state={state} conn={conn} now={now}>
-        <DemoControls call={call} />
-      </TopBar>
-      <main className="split">
-        <CallPanel state={state} call={call} now={now} />
-        <CareFeed timeline={state.timeline} familyName={state.profile?.family.name} />
+    <div className="lv">
+      <header className="lv-top">
+        <a className="lv-brand" href="/">Troska</a>
+        <a className="lv-line" href={TROSKA_LINE.href}><Icon name="phone" />Troska's line: {TROSKA_LINE.label}</a>
+        <span className={`lv-conn is-${conn}`}><span className="lv-conn-dot" aria-hidden="true" />{CONN[conn]}</span>
+      </header>
+      <main className="lv-main">
+        <StatusBand state={state} call={call} now={now} />
+        <div className="lv-col">
+          <HeardCard state={state} onCall={state.callState === "in_progress" || call.phase === "voice"} start={call.start} />
+          <Remembers timeline={state.timeline} now={now} who={firstName(state)} />
+          <Medicines meds={state.meds} now={now} who={firstName(state)} />
+        </div>
+        <div className="lv-col">
+          <CareFeed timeline={state.timeline} familyName={state.profile?.family.name} relation={state.profile?.family.relation} />
+        </div>
+        <DemoTools call={call} />
       </main>
     </div>
   )
 }
 
-// No router library: "/live" is the demo dashboard, every other path the landing page (vercel.json rewrites all paths here).
+// No router library: "/live" is the dashboard, every other path the landing page (vercel.json rewrites all paths here).
 const live = location.pathname.replace(/\/+$/, "") === "/live"
-if (live) document.title = "Troska · Live demo"
+if (live) document.title = "Troska · Care dashboard"
 createRoot(document.getElementById("root")!).render(live ? <App /> : <Landing />)

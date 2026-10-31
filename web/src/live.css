@@ -1,0 +1,142 @@
+/* /live: the care dashboard. Tokens, base, .btn and .icon come from styles.css.
+   Motion: one easing family (--lv-ease), transform and opacity only, all of it off under reduced motion. */
+.lv {
+  --lv-accent: var(--accent, #E8743B);
+  --lv-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  min-height: 100vh; background: var(--paper);
+}
+.lv ::selection { background: var(--ink); color: var(--surface); }
+
+/* ---------- header ---------- */
+.lv-top {
+  max-width: var(--page); margin: 0 auto; padding: var(--space-5) var(--gutter);
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5);
+}
+.lv-brand { font-family: var(--font-display); font-size: 34px; line-height: 1; color: var(--ink); text-decoration: none; }
+.lv-line {
+  margin-left: auto; display: inline-flex; align-items: center; gap: var(--space-2);
+  font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; text-underline-offset: 0.25em;
+}
+.lv-conn {
+  display: inline-flex; align-items: center; gap: var(--space-2); padding: 6px 14px;
+  border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface);
+  font-size: var(--text-small); color: var(--ink-2);
+}
+.lv-conn-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ink-2); }
+.lv-conn.is-live .lv-conn-dot, .lv-conn.is-mock .lv-conn-dot { background: var(--lv-accent); animation: lv-breathe 1.6s var(--lv-ease) infinite alternate; }
+.lv-conn.is-polling .lv-conn-dot, .lv-conn.is-connecting .lv-conn-dot { background: var(--attention); }
+.lv-conn.is-offline .lv-conn-dot { background: var(--urgent); }
+@keyframes lv-breathe { to { opacity: 0.35; transform: scale(0.75); } }
+
+/* ---------- layout: one column on phones (answer, heard, circle, updates, medicines); two columns from 1100px ---------- */
+.lv-main {
+  max-width: var(--page); margin: 0 auto; padding: 0 var(--gutter) var(--space-8);
+  display: grid; gap: var(--space-7, 56px) var(--space-8, 72px); align-items: start;
+}
+.lv-col, .lv-main .cf { display: contents; }
+.cp-heard { order: 1; }
+.lv-memory { order: 2; }
+.lv-meds { order: 3; }
+.cf-circle { order: 4; }
+.cf-updates { order: 5; }
+.lv-foot { order: 6; }
+@media (min-width: 1100px) {
+  .lv-main { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+  .lv-band, .lv-foot { grid-column: 1 / -1; }
+  .lv-col, .lv-main .cf { display: grid; gap: var(--space-7, 56px); align-content: start; min-width: 0; }
+}
+
+/* Open sections: a hairline and whitespace, never a box. The status band is the only tinted surface. */
+.lv-sec { min-width: 0; padding-top: var(--space-5); border-top: 1px solid var(--line); }
+.lv-sec h2 { font-size: 30px; }
+.lv-empty { margin-top: var(--space-3); color: var(--ink-2); max-width: var(--measure); }
+
+/* ---------- the status band: the answer, color-coded ---------- */
+.lv-band {
+  --tone: var(--ok);
+  display: grid; gap: var(--space-5); align-items: center; min-width: 0;
+  padding: var(--space-5); border-radius: calc(var(--radius) + 6px);
+  background: var(--ok-bg); border: 1px solid color-mix(in srgb, var(--tone) 24%, transparent);
+}
+.lv-band.is-watch { --tone: var(--attention); background: var(--attention-bg); }
+.lv-band.is-urgent { --tone: var(--urgent); background: var(--urgent-bg); }
+.lv-band.is-empty { --tone: var(--ink); background: var(--surface-2); }
+@media (min-width: 760px) {
+  .lv-band { grid-template-columns: 184px minmax(0, 1fr); padding: var(--space-6); gap: var(--space-6); }
+  .lv-band.is-empty { grid-template-columns: minmax(0, 1fr); }
+  .lv-band .cp-action { grid-column: 1 / -1; }
+}
+@media (min-width: 1100px) {
+  .lv-band { grid-template-columns: 184px minmax(0, 1fr) minmax(340px, 400px); }
+  .lv-band.is-empty { grid-template-columns: minmax(0, 1fr) minmax(340px, 400px); }
+  .lv-band .cp-action { grid-column: auto; }
+}
+
+.lv-person img {
+  display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; object-position: 40% 35%;
+  border-radius: 50%; box-shadow: 0 0 0 6px color-mix(in srgb, var(--surface) 70%, transparent), 0 8px 20px rgb(28 36 51 / 0.16);
+}
+.lv-person figcaption { display: grid; margin-top: var(--space-3); }
+.lv-name { font-weight: 700; font-size: 20px; line-height: 1.3; }
+.lv-line1 { color: var(--ink-2); font-size: var(--text-small); line-height: 1.4; }
+@media (max-width: 759px) {
+  .lv-person { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: var(--space-4); align-items: center; }
+  .lv-person figcaption { margin-top: 0; }
+}
+
+.lv-verdict { display: grid; gap: var(--space-3); min-width: 0; animation: lv-rise 700ms var(--lv-ease) both; }
+.lv-verdict h1 { color: var(--tone); font-size: clamp(40px, 5vw, 64px); }
+.lv-verdict-icon { width: 0.62em; height: 0.62em; margin-right: 0.2em; vertical-align: -0.04em; stroke-width: 2.25; }
+.lv-reason { font-size: 21px; line-height: 1.45; max-width: 42ch; overflow-wrap: anywhere; }
+.lv-next { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--space-2); font-weight: 700; font-variant-numeric: tabular-nums; }
+.lv-next .icon { color: var(--tone); width: 22px; height: 22px; }
+.lv-count { color: var(--tone); }
+@keyframes lv-rise { from { opacity: 0.4; transform: translateY(12px); } } /* starts visible: the verdict must never hide if motion stalls */
+@media (max-width: 759px) { .lv-reason { font-size: 19px; } }
+
+/* ---------- medicines ---------- */
+.lv-meds ul { margin-top: var(--space-4); }
+.lv-meds li {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4);
+  padding: var(--space-4) 0; border-top: 1px solid var(--line);
+}
+.lv-med-name { font-weight: 700; }
+.lv-med-name span { font-weight: 400; color: var(--ink-2); }
+.lv-med-sub { color: var(--ink-2); font-size: var(--text-small); font-variant-numeric: tabular-nums; }
+.lv-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px 5px 10px;
+  border-radius: var(--radius-pill); font-size: var(--text-small); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.lv-chip .icon { width: 18px; height: 18px; stroke-width: 2.25; }
+.lv-chip.is-taken { background: var(--ok-bg); color: var(--ok); }
+.lv-chip.is-missed { background: var(--urgent-bg); color: var(--urgent); }
+.lv-chip.is-due { background: var(--surface-2); color: var(--ink); }
+
+/* ---------- Troska remembers: one quiet line per past call ---------- */
+.lv-mem-list { margin-top: var(--space-3); }
+.lv-mem-list li {
+  display: grid; grid-template-columns: minmax(0, 11em) minmax(0, 1fr); gap: 2px var(--space-4);
+  padding: var(--space-3) 0; border-top: 1px dashed var(--line); animation: cp-in 600ms var(--lv-ease) both;
+}
+.lv-mem-list li:first-child { border-top: 0; }
+.lv-mem-list time { color: var(--ink-2); font-size: var(--text-small); font-weight: 700; font-variant-numeric: tabular-nums; padding-top: 2px; }
+.lv-mem-list span { overflow-wrap: anywhere; }
+@media (max-width: 640px) { .lv-mem-list li { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- footer: demo tools ---------- */
+.lv-foot { margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--line); color: var(--ink-2); font-size: var(--text-small); }
+.lv-tools summary { width: fit-content; padding: var(--space-2) 0; cursor: pointer; font-weight: 700; }
+.lv-tools-body { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-3) 0 var(--space-2); }
+.lv-fiction { margin-top: var(--space-2); font-size: 14px; }
+
+@media (max-width: 640px) {
+  .lv-line { order: 3; margin-left: 0; width: 100%; }
+  .lv-conn { margin-left: auto; }
+  .lv-band { padding: var(--space-4); }
+}
+
+/* Reduced motion: no animation at all, final states only. */
+@media (prefers-reduced-motion: reduce) {
+  .lv *, .lv *::before, .lv *::after { animation: none !important; transition: none !important; }
+  .lv .cf-flight { display: none; }
+}
