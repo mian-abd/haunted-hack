@@ -53,6 +53,18 @@ Both files are safe to re-run. Pick one way:
 1. `supabase/migrations/20261031120000_init.sql`
 2. `supabase/seed.sql`
 
+**C. `apply.ts`** (no Supabase CLI needed; this is how the team project was set up on Oct 31). It runs both files over a
+Postgres connection string from the dashboard's **Connect** button. The direct host `db.<ref>.supabase.co` is IPv6-only,
+so on an IPv4 network use the session pooler instead: user `postgres.<ref>`, host `aws-0-<region>.pooler.supabase.com`,
+port 5432.
+
+```sh
+SUPABASE_DB_URL='postgresql://postgres.<ref>:<db-password>@aws-0-us-east-1.pooler.supabase.com:5432/postgres' bun supabase/apply.ts
+```
+
+It prints the row counts when it is done. The connection string holds the database password: type it in the shell,
+never commit it.
+
 **B. CLI**, from the repo root:
 
 ```sh

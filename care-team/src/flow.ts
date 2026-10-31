@@ -71,7 +71,7 @@ export function startCareTeam(relay: Relay, actor: ActorBridge, records = loadRe
       console.log(`[care-team] case ${caseId}: ${e.details?.med} refill already requested, skipping`)
       return caseId
     }
-    const c = { type: "case", caseId, elderId: e.elderId, kind: e.kind, reason: e.reason, details: e.details ?? {}, for: owner(e.kind) }
+    const c = { type: "case", caseId, trigger: e.kind, elderId: e.elderId, kind: e.kind, reason: e.reason, details: e.details ?? {}, for: owner(e.kind) }
     void (async () => {
       await relay.ensureChannel(channelFor(e.elderId))
       await send("caretaker", c.for, c.for, await caseNote(c, await records(e.elderId)), c)
@@ -81,17 +81,17 @@ export function startCareTeam(relay: Relay, actor: ActorBridge, records = loadRe
 
   relay.listen("doctor", async (m) => {
     if (m.data.type !== "case" || m.data.for !== "doctor") return
-    const { caseId, elderId } = m.data
+    const { caseId, elderId, trigger } = m.data // trigger: the escalation kind this sub-thread answers (one case per call)
     const record = await records(elderId)
     const d = await triage(m.data, record)
     const k = byId.get(caseId)
     if (k && RANK[k.urgency] > RANK[d.urgency]) d.urgency = k.urgency // within a case, urgency never goes down
     if (k) k.urgency = d.urgency
     const name = record.patient?.name ?? elderId
-    await send("doctor", "caretaker", "doctor", d.text, { type: "decision", caseId, elderId, urgency: d.urgency, reason: d.reason, actions: d.actions, recheck: d.recheck, refillMed: d.refillMed, notifyFamily: d.notifyFamily })
-    if (d.refillMed && firstRefill(k, d.refillMed)) await send("doctor", "pharmacy", "pharmacy", `Please refill ${d.refillMed} for ${name} today.`, { type: "refill_request", caseId, elderId, med: d.refillMed }, "pharmacy")
+    await send("doctor", "caretaker", "doctor", d.text, { type: "decision", caseId, trigger, elderId, urgency: d.urgency, reason: d.reason, actions: d.actions, recheck: d.recheck, refillMed: d.refillMed, notifyFamily: d.notifyFamily })
+    if (d.refillMed && firstRefill(k, d.refillMed)) await send("doctor", "pharmacy", "pharmacy", `Please refill ${d.refillMed} for ${name} today.`, { type: "refill_request", caseId, trigger, elderId, med: d.refillMed }, "pharmacy")
     const plan = d.actions.length ? ` Plan: ${d.actions.map(bare).join("; ")}.` : ""
-    if (d.notifyFamily) await send("doctor", "family", "family", `Please update ${record.patient?.family_name ?? `${name}'s family`}: ${name} is on ${d.urgency.toUpperCase()}. ${bare(d.reason)}.${plan}`, { type: "notify_family", caseId, elderId, urgency: d.urgency, reason: d.reason, actions: d.actions }, "family")
+    if (d.notifyFamily) await send("doctor", "family", "family", `Please update ${record.patient?.family_name ?? `${name}'s family`}: ${name} is on ${d.urgency.toUpperCase()}. ${bare(d.reason)}.${plan}`, { type: "notify_family", caseId, trigger, elderId, urgency: d.urgency, reason: d.reason, actions: d.actions }, "family")
   })
 
   relay.listen("caretaker", async (m) => {
@@ -102,17 +102,17 @@ export function startCareTeam(relay: Relay, actor: ActorBridge, records = loadRe
   })
 
   relay.listen("pharmacy", async (m) => {
-    const { type, caseId, elderId } = m.data
+    const { type, caseId, trigger, elderId } = m.data
     if (type !== "refill_request" && !(type === "case" && m.data.for === "pharmacy")) return
     const r = await refillNote(m.data.med ?? m.data.details?.med, await records(elderId))
-    await send("pharmacy", m.from, "pharmacy", r.text, { type: "refill_ready", caseId, elderId, med: r.med })
+    await send("pharmacy", m.from, "pharmacy", r.text, { type: "refill_ready", caseId, trigger, elderId, med: r.med })
   })
 
   relay.listen("family", async (m) => {
-    const { type, caseId, elderId } = m.data
+    const { type, caseId, trigger, elderId } = m.data
     if (type !== "notify_family" && !(type === "case" && m.data.for === "family")) return
     const record = await records(elderId)
-    await send("family", "family-contact", "family", await familyText(m.data, record), { type: "family_message", caseId, elderId, contact: record.patient?.family_name ?? null, relation: record.patient?.family_relation ?? null })
+    await send("family", "family-contact", "family", await familyText(m.data, record), { type: "family_message", caseId, trigger, elderId, contact: record.patient?.family_name ?? null, relation: record.patient?.family_relation ?? null })
   })
 
   return { escalate }

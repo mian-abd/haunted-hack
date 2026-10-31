@@ -142,6 +142,17 @@ closing summary is `save_call_summary` (it maps to `end_call` here), because `en
 hang-up. The post-call webhook is optional: create it in the ElevenLabs dashboard (Agents settings → post-call
 webhook → `https://<tunnel>/api/el/post-call`) and put its secret in `ELEVENLABS_WEBHOOK_SECRET`.
 
+## Supabase (`src/store.ts`)
+
+With `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set:
+- **Reads:** `POST /api/demo/reset` reads the patient and prescriptions from Supabase, and falls back to `supabase/seed.json` if the read fails.
+- **`care_events` writes:** every tool event (`med`, `symptom`, `teach_back`, refill request as `note`, `vitals`) and every `call_ended`.
+- **`calls` writes:** one row per call, with `started_at` taken from the timeline's `call_started`.
+- **Transcripts:** the ElevenLabs post-call transcript is written to the call's row (`calls.transcript`).
+
+Every write is fire-and-forget with a 5 s timeout, so a slow database never blocks a call. Tests stub `fetch` and clear
+the Supabase variables, so they never touch the real project.
+
 ## How it connects
 
 - **web/** calls this API. For the voice call it gets `value` from `/api/realtime-token`, then POSTs its SDP offer to

@@ -11,6 +11,19 @@ Built at Haunted Hacks (Oct 31, 2026) with Terse Durable Actors, Agent Relay, El
 - The Terse CLI: `bunx terse-cli@latest install --yes` (installs to `~/.bun/bin/terse`)
 - Chrome or another WebRTC browser with a microphone, for the live voice call
 - An OpenAI API key (optional: without one, voice is offline, the agents use canned replies, and the scripted demo still runs)
+- For the full product: the ElevenLabs API key (phone call), the Supabase URL and secret key (records and history), and a Terse API key (the cloud actor). All shared by DM, never in git.
+
+## Where things run (live setup, Oct 31)
+
+| Piece | Where | Config |
+|---|---|---|
+| `ElderActor` | **Terse cloud**, project `unc-actor` (org "unc"). Deployed with `cd actor && terse deploy` | `TERSE_ACTOR_URL=https://api.useterse.ai/cmvww8c4y013tjy2a0d2vx8x2/actors` and `TERSE_API_KEY` (app.useterse.ai → API keys) in `server/.env` and `care-team/.env`. With both set, no `terse actor dev` is needed, on any OS. |
+| Hospital records, call archive, care history | **Supabase** (the team project). Schema + seed applied with `supabase/apply.ts` | `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (the `sb_secret_` key) in `server/.env` and `care-team/.env` |
+| Phone voice | **ElevenLabs** agent "Unc check-in" on our Twilio number "HH" | `server/.env`: see "3. The phone call" |
+| Care team | **Agent Relay** (Relaycast), anonymous 24 h workspace per start | `RELAY_WORKSPACE_KEY` to keep one workspace |
+| Agent brains, browser voice | **OpenAI** (`gpt-6-luna`, `gpt-realtime-2.1`) | `OPENAI_API_KEY` in `server/.env` and `care-team/.env` (or the root `.env` for dev.sh) |
+
+What Supabase holds, so the care history survives any restart or laptop: `patients`, `prescriptions` and `clinical_notes` (read by the demo reset and the doctor agent), `calls` (one row per call, with `started_at`, the summary, the mood and the ElevenLabs transcript), and `care_events` (every med, symptom, teach-back, refill and vitals event, every Agent Relay message, and every call ending).
 
 ## Quickstart
 
@@ -51,7 +64,9 @@ Each line starts from the repo root. Every one should end with 0 fail or a clean
 5. Open http://localhost:5173/live, open **Demo controls**, press **Reset demo**, then **Check-in in 15 s**, and answer in the browser. Say you're dizzy and ran out of your blood-pressure pills. The Care Feed should fill (doctor, pharmacy, family), the status should turn to watch, and a recheck should be scheduled.
 6. Durability flex: see "The durability flex" under Troubleshooting.
 
-**On Windows:** `dev.sh` is a bash script written for macOS (it uses `lsof` and process groups). Use Git Bash, or start the four services in four terminals: `cd actor && terse actor dev`, `cd server && bun run start`, `cd care-team && bun run start`, `cd web && bun run dev`. Started that way, each service reads only its own folder's `.env`, so copy `OPENAI_API_KEY` into `server/.env` and `care-team/.env`.
+**On Windows:** the Terse CLI has no Windows build of the local actor runtime ("No prebuilt runtime for win32/x64"), so use the cloud actor (table above) and skip `terse actor dev`. `dev.sh` is a bash script written for macOS (it uses `lsof` and process groups), so start the other three services in three terminals: `cd server && bun run start`, `cd care-team && bun run start`, `cd web && bun run dev`. Started that way, each service reads only its own folder's `.env`, so put `OPENAI_API_KEY`, the Terse and the Supabase settings in `server/.env` and `care-team/.env`. `terse deploy` on Windows needs Developer Mode on (it creates a symbolic link).
+
+`bun e2e.ts` checks one care-team case per call: every agent message carries `data.caseId` (the call) and `data.trigger` (the escalation it answers: `symptom`, `refill`, `teach_back`, `summary`), and each medication is refilled once. Last run on the live setup (cloud actor, OpenAI, Agent Relay, Supabase): ALL PASS, every lane answered 4.1 s after the symptom.
 
 ### 3. The phone call (ElevenLabs + Twilio)
 

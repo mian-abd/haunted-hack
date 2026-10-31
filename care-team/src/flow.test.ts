@@ -126,6 +126,9 @@ test("one case per call: the demo call is one thread with exactly one refill", a
   expect(count("refill_ready")).toBe(1)
   expect(count("refill_request")).toBe(0) // the direct refill came first, so the doctor does not ask again
   expect(events().every((e) => e.data.caseId === ids[0])).toBe(true)
+  // every message names the escalation its sub-thread answers, so one call can still be read per trigger
+  expect(events().every((e) => ["symptom", "refill", "teach_back", "summary"].includes(e.data.trigger))).toBe(true)
+  expect(events().find((e) => e.data.type === "refill_ready")!.data.trigger).toBe("refill")
 })
 
 test("escalate body validation and channel names", () => {
