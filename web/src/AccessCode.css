@@ -1,0 +1,9 @@
+/* The team-code dialog (AccessCode.tsx), over any page. */
+.ac-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: var(--space-4); background: rgb(28 36 51 / 0.45); }
+.ac-card { box-sizing: border-box; display: grid; gap: var(--space-4); width: min(440px, 100%); padding: var(--space-6); border-radius: 20px; background: var(--surface); box-shadow: 0 24px 60px rgb(28 36 51 / 0.25); }
+.ac-title { margin: 0; font-family: var(--font-display); font-size: var(--text-h3); font-weight: 400; color: var(--ink); }
+.ac-text { margin: 0; color: var(--ink-2); }
+.ac-error { margin: 0; color: var(--urgent); font-weight: 700; }
+.ac-field { display: grid; gap: var(--space-2); font-weight: 700; }
+.ac-field input { box-sizing: border-box; width: 100%; min-height: 52px; padding: var(--space-3) var(--space-4); border: 1px solid var(--ink-2); border-radius: 12px; background: var(--surface); font-weight: 400; }
+.ac-card .btn { justify-self: start; }

@@ -14,9 +14,26 @@ const KEY: string = (() => {
   } catch { return k ?? "" } // storage blocked (private mode): the key still works for this page load
 })()
 export const authHeaders = (): Record<string, string> => (KEY ? { "x-unc-key": KEY } : {})
+/** True when this device already sent a code, so a 403 means that code is wrong. */
+export const HAS_KEY = KEY !== ""
+
+/** A 403 from server/ means it wants the team code (tunnel and Vercel visitors): AccessCode listens and asks for it. */
+export const NEED_CODE = "troska:need-code"
+function refused(r: Response) {
+  if (r.status === 403 && typeof window !== "undefined") window.dispatchEvent(new Event(NEED_CODE))
+}
+
+/** Remembers the code and reloads. Without storage, the code rides in ?key= instead (read above on load). */
+export function rememberKey(code: string) {
+  const u = new URL(location.href)
+  try { localStorage.setItem("unc-key", code); u.searchParams.delete("key") } // a stale ?key= would win over storage
+  catch { u.searchParams.set("key", code) }
+  location.replace(u.toString())
+}
 
 export async function getJSON(path: string): Promise<any> {
   const r = await fetch(SERVER + path, { headers: authHeaders() })
+  refused(r)
   if (!r.ok) throw new Error(`${path.split("?")[0]} returned ${r.status}`)
   return r.json()
 }
@@ -28,6 +45,7 @@ export async function post(path: string, body: Record<string, unknown>): Promise
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ elderId: ELDER, ...body }),
   })
+  refused(r)
   // err.body keeps the server's readable error, e.g. /api/tool's { output: "Error: severity must be ..." } for the voice model.
   if (!r.ok) throw Object.assign(new Error(`${path} returned ${r.status}`), { body: await r.json().catch(() => null) })
   return r.json().catch(() => ({})) // 202 with an empty body is fine

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { createRoot } from "react-dom/client"
 import { MOCK, post } from "./api"
+import { AccessCode } from "./AccessCode"
 import { CallAction, HeardCard, Icon, TROSKA_LINE, clock, firstName, useCall, type Call } from "./CallPanel"
 import { CareFeed } from "./CareFeed"
 import { Landing } from "./landing/Landing"
@@ -183,4 +184,5 @@ function App() {
 const path = location.pathname.replace(/\/+$/, "")
 if (path === "/live") document.title = "Troska · Care dashboard"
 if (path === "/doctor") document.title = "Troska · For doctors and families"
-createRoot(document.getElementById("root")!).render(path === "/live" ? <App /> : path === "/doctor" ? <DoctorPortal /> : <Landing />)
+const page = path === "/live" ? <App /> : path === "/doctor" ? <DoctorPortal /> : <Landing />
+createRoot(document.getElementById("root")!).render(<>{page}<AccessCode /></>)
