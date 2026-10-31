@@ -1,6 +1,6 @@
 // server/: HTTP API from PLAN.md. Bun.serve on :8787, no framework.
 import { elder, isFake, prepareWebsocket, type Med, type Profile } from "./actor"
-import { callMode, dial, startAutoDial, webhook } from "./elevenlabs"
+import { callMode, dial, phoneCallEnded, startAutoDial, webhook } from "./elevenlabs"
 import { archiveCall, archiveEvent, recordFor } from "./store"
 export { supabaseAuth } from "./store"
 
@@ -21,7 +21,7 @@ const routes: Record<string, (elderId: string, b: Body) => Promise<unknown>> = {
   "GET /api/actor-ws": async id => isFake ? json({ error: "fake actor (TERSE_FAKE=1 or no generated client): no websocket, poll /api/state", mock: true }, 503) : prepareWebsocket(id),
   "GET /api/state": id => elder(id).getState(),
   "POST /api/tool": async (id, b) => ({ output: await runTool(id, need(b.name, "name"), parseArgs(b.args)) }),
-  "POST /api/demo/reset": async id => { await elder(id).setup(...await seedFor(id)); return OK },
+  "POST /api/demo/reset": async id => { phoneCallEnded(id); await elder(id).setup(...await seedFor(id)); return OK },
   "POST /api/demo/schedule": async (id, b) => {
     if (typeof b.inSeconds !== "number" || b.inSeconds < 0) bad("inSeconds must be a number >= 0")
     const atMs = Date.now() + b.inSeconds * 1000
@@ -137,6 +137,7 @@ async function endCall(elderId: string, summary: string, mood?: string) {
   const actor = elder(elderId)
   const startedAt = (await actor.getState()).timeline.findLast(e => e.kind === "call_started")?.ts ?? null
   await actor.endCall(summary, mood)
+  phoneCallEnded(elderId)
   void archiveCall(elderId, summary, mood, startedAt)
 }
 

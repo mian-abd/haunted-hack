@@ -41,12 +41,18 @@ export const callMode = () => ({
 })
 
 const dialing = new Set<string>()
+// Phone calls in flight, per elder. The actor's alarm can fire mid-call (an urgent recheck comes after 60 s) and mark a
+// new call due; that must not ring the phone a second time. Auto-dial retries after the call ends (end_call, the
+// post-call webhook or a demo reset), so the recheck still happens. A stale entry expires after 15 minutes.
+const onPhone = new Map<string, number>()
+export const phoneCallEnded = (elderId: string) => { onPhone.delete(elderId) }
 
 // POST /api/call/dial: ElevenLabs places the call from our Twilio number, then the actor marks the call started.
 export async function dial(elderId: string): Promise<{ conversationId: string | null; callSid: string | null }> {
   const [key, agent, phone, to] = ["ELEVENLABS_API_KEY", "ELEVENLABS_AGENT_ID", "ELEVENLABS_PHONE_NUMBER_ID", "ELDER_PHONE"].map(env)
   if (!key || !agent || !phone || !to) fail("phone calls need ELEVENLABS_API_KEY, ELEVENLABS_AGENT_ID, ELEVENLABS_PHONE_NUMBER_ID and ELDER_PHONE in server/.env", 503)
   if (dialing.has(elderId)) fail("already dialing", 409)
+  if (Date.now() - (onPhone.get(elderId) ?? 0) < 15 * 60_000) fail("a phone call is already in progress", 409)
   const actor = elder(elderId)
   const s = await actor.getState()
   if (s.callState === "in_progress") fail("a call is already in progress", 409)
@@ -66,6 +72,7 @@ export async function dial(elderId: string): Promise<{ conversationId: string | 
     })
     const out: Body = await r.json().catch(() => ({}))
     if (!r.ok || out.success === false) fail(`ElevenLabs call failed (${r.status}): ${out.message ?? out.detail?.[0]?.msg ?? out.detail ?? "no details"}`, 502)
+    onPhone.set(elderId, Date.now())
     await actor.startCall()
     await actor.logEvent({ kind: "note", from: "system", text: `Calling ${first}'s phone`, data: { conversationId: out.conversation_id ?? null } })
     return { conversationId: out.conversation_id ?? null, callSid: out.callSid ?? null }
@@ -109,6 +116,7 @@ async function postCall(req: Request, raw: string, deps: Deps): Promise<Response
   try { ev = JSON.parse(raw) } catch { return fail("body must be JSON") }
   const d: Body = ev.data ?? {}
   const elderId = d.conversation_initiation_client_data?.dynamic_variables?.elder_id || defaultElder()
+  phoneCallEnded(elderId) // the call is over, whatever the event
   const actor = elder(elderId)
   let summary: string | null = null
   if (ev.type === "post_call_transcription") {
@@ -133,6 +141,7 @@ export async function autoDialOnce(elderId: string, now = Date.now()): Promise<"
   if (s?.callState !== "due") return "skipped"
   try {
     await dial(elderId)
+    retryAt.delete(elderId)
     console.log(`[auto-dial] ${elderId}: calling`)
     return "dialed"
   } catch (e: any) {

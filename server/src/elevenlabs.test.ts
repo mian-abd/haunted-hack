@@ -180,3 +180,20 @@ test("a recheck call tells the agent it is a follow-up", async () => {
   await elder(ID).setStatus("watch", "Dizzy after missing Amlodipine")
   expect(elderContext(await elder(ID).getState())).toContain("This is a follow-up call")
 })
+
+test("an alarm during a phone call does not ring the phone again; the recheck dials after the call ends", async () => {
+  expect((await post("/api/call/dial", { elderId: ID })).status).toBe(200)
+  await post("/api/demo/schedule", { elderId: ID, inSeconds: 0 }) // e.g. the 60 s urgent recheck firing mid-call
+  await Bun.sleep(20)
+  expect((await state()).callState).toBe("due")
+  const now = Date.now()
+  expect(await autoDialOnce(ID, now)).toBe("failed") // a phone call is already in progress
+  expect(outbound()).toHaveLength(1)
+
+  const end = await post("/api/el/tool/end_call", { summary: "Wrapped up.", mood: "ok" }, { "x-unc-secret": SECRET })
+  expect(end.status).toBe(200)
+  await post("/api/demo/schedule", { elderId: ID, inSeconds: 0 })
+  await Bun.sleep(20)
+  expect(await autoDialOnce(ID, now + 61_000)).toBe("dialed")
+  expect(outbound()).toHaveLength(2)
+})
